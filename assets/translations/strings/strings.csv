@@ -1,0 +1,12 @@
+Identificatore, Italiano, Inglese
+ERRORE_DI_COMUNICAZIONE, Errore di comunicazione con la macchina!, Communication error with the underlying machine!
+RIPROVA, Riprova, Try again
+DISABILITA, Disabilita, Disable
+INGRESSI, Ingressi, Inputs
+USCITE, Uscite, Outputs
+CONFIGURAZIONE, Configurazione, Configuration
+DIAGNOSI, Diagnosi, Diagnose
+TEST_MACCHINA, Test macchina, Machine test
+PARAMETRI, Parametri, Parameters
+DEFAULT, Default, Default
+LIMITE_PARAMETRO, Il valore inserito non è valido; il parametro è stato corretto al limite più vicino, Invalid value; the parameter has been corrected to the closest limit
