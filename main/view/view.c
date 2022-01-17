@@ -5,6 +5,8 @@
 #include "model/model.h"
 #include "view.h"
 #include "theme/style.h"
+#include "theme/theme.h"
+#include "widgets/custom_tabview.h"
 
 
 QUEUE_DECLARATION(event_queue, view_event_t, 12);
@@ -14,6 +16,7 @@ QUEUE_DEFINITION(event_queue, view_event_t);
 static void periodic_timer_callback(lv_timer_t *timer);
 static void free_user_data_callback(lv_event_t *event);
 static void event_callback(lv_event_t *event);
+static void plus_minus_keyboard_cb(lv_event_t *event);
 
 
 static struct event_queue q;
@@ -25,7 +28,6 @@ void view_init(model_t *pmodel,
                void (*flush_cb)(struct _lv_disp_drv_t *disp_drv, const lv_area_t *area, lv_color_t *color_p),
                void (*read_cb)(struct _lv_indev_drv_t *indev_drv, lv_indev_data_t *data)) {
     lv_init();
-    style_init();
 
     /*A static or global variable to store the buffers*/
     static lv_disp_draw_buf_t disp_buf;
@@ -45,10 +47,7 @@ void view_init(model_t *pmodel,
     disp_drv.ver_res  = DISPLAY_VERTICAL_RESOLUTION;   /*Set the vertical resolution in pixels*/
 
     lv_disp_t *disp = lv_disp_drv_register(&disp_drv); /*Register the driver and save the created display objects*/
-
-    lv_theme_t *th = lv_theme_default_init(disp, lv_palette_main(LV_PALETTE_GREY), lv_palette_main(LV_PALETTE_BLUE),
-                                           LV_THEME_DEFAULT_DARK, LV_FONT_DEFAULT);
-    lv_disp_set_theme(disp, th);
+    theme_init(disp);
 
     static lv_indev_drv_t indev_drv;
     lv_indev_drv_init(&indev_drv); /*Basic initialization*/
@@ -148,7 +147,9 @@ void view_close_all(void *data) {
 
 
 lv_timer_t *view_register_periodic_timer(size_t period, int code) {
-    return lv_timer_create(periodic_timer_callback, period, (void *)(uintptr_t)code);
+    lv_timer_t *timer = lv_timer_create(periodic_timer_callback, period, (void *)(uintptr_t)code);
+    lv_timer_pause(timer);
+    return timer;
 }
 
 
@@ -168,11 +169,55 @@ void view_register_object_default_callback_with_number(lv_obj_t *obj, int id, in
     lv_obj_add_event_cb(obj, event_callback, LV_EVENT_CLICKED, NULL);
     lv_obj_add_event_cb(obj, event_callback, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_add_event_cb(obj, event_callback, LV_EVENT_RELEASED, NULL);
+    lv_obj_add_event_cb(obj, event_callback, LV_EVENT_PRESSED, NULL);
     lv_obj_add_event_cb(obj, event_callback, LV_EVENT_PRESSING, NULL);
     lv_obj_add_event_cb(obj, event_callback, LV_EVENT_LONG_PRESSED, NULL);
     lv_obj_add_event_cb(obj, event_callback, LV_EVENT_LONG_PRESSED_REPEAT, NULL);
+    lv_obj_add_event_cb(obj, event_callback, LV_EVENT_CANCEL, NULL);
+    lv_obj_add_event_cb(obj, event_callback, LV_EVENT_READY, NULL);
 }
 
+
+
+void view_register_keyboard_plus_minus_callback(lv_obj_t *kb, int id) {
+    view_object_data_t *data = malloc(sizeof(view_object_data_t));
+    data->id                 = id;
+    data->number             = 0;
+    lv_obj_set_user_data(kb, data);
+    lv_obj_remove_event_cb(kb, free_user_data_callback);
+    lv_obj_remove_event_cb(kb, event_callback);
+    lv_obj_remove_event_cb(kb, lv_keyboard_def_event_cb);
+    lv_obj_add_event_cb(kb, free_user_data_callback, LV_EVENT_DELETE, NULL);
+    lv_obj_add_event_cb(kb, plus_minus_keyboard_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(kb, plus_minus_keyboard_cb, LV_EVENT_CANCEL, NULL);
+    lv_obj_add_event_cb(kb, plus_minus_keyboard_cb, LV_EVENT_READY, NULL);
+}
+
+
+static void plus_minus_keyboard_cb(lv_event_t *event) {
+    lv_obj_t           *obj     = lv_event_get_target(event);
+    view_object_data_t *data    = lv_obj_get_user_data(lv_event_get_current_target(event));
+    lv_obj_t           *ta      = lv_keyboard_get_textarea(obj);
+    pman_event_t        myevent = {.code = VIEW_EVENT_CODE_LVGL, .event = lv_event_get_code(event), .data = *data};
+    if (ta != NULL) {
+        myevent.string_value = lv_textarea_get_text(ta);
+    }
+
+    if (lv_event_get_code(event) == LV_EVENT_VALUE_CHANGED) {
+        myevent.event    = LV_EVENT_CLICKED;
+        unsigned int btn = lv_btnmatrix_get_selected_btn(obj);
+        if (btn == 7 || btn == 11) {
+            if (btn == 7) {
+                myevent.data.number = +1;
+            } else {
+                myevent.data.number = -1;
+            }
+        } else {
+            lv_keyboard_def_event_cb(event);
+        }
+    }
+    view_event(myevent);
+}
 
 
 static void free_user_data_callback(lv_event_t *event) {
@@ -187,24 +232,32 @@ static void free_user_data_callback(lv_event_t *event) {
 static void event_callback(lv_event_t *event) {
     view_object_data_t *data       = lv_obj_get_user_data(lv_event_get_current_target(event));
     view_event_t        pman_event = {.code = VIEW_EVENT_CODE_LVGL, .data = *data, .event = lv_event_get_code(event)};
-    switch (pman_event.event) {
-        case LV_EVENT_VALUE_CHANGED: {
-            lv_obj_t *obj = lv_event_get_current_target(event);
-            if (lv_obj_check_type(obj, &lv_dropdown_class)) {
-                pman_event.value = lv_dropdown_get_selected(obj);
-            } else if (lv_obj_check_type(obj, &lv_switch_class)) {
-                pman_event.value = lv_obj_has_state(obj, LV_STATE_CHECKED);
-            } else if (lv_obj_check_type(obj, &lv_roller_class)) {
-                pman_event.value = lv_roller_get_selected(obj);
-            } else if (lv_obj_check_type(obj, &lv_textarea_class)) {
-                pman_event.string_value = lv_textarea_get_text(obj);
-            }
-            break;
-        }
 
-        default:
-            break;
+    lv_obj_t *obj = lv_event_get_current_target(event);
+    if (lv_obj_check_type(obj, &lv_btn_class)) {
+        pman_event.value = lv_obj_has_state(obj, LV_STATE_CHECKED);
+    } else if (lv_obj_check_type(obj, &lv_dropdown_class)) {
+        pman_event.value = lv_dropdown_get_selected(obj);
+    } else if (lv_obj_check_type(obj, &lv_switch_class)) {
+        pman_event.value = lv_obj_has_state(obj, LV_STATE_CHECKED);
+    } else if (lv_obj_check_type(obj, &lv_roller_class)) {
+        pman_event.value = lv_roller_get_selected(obj);
+    } else if (lv_obj_check_type(obj, &lv_textarea_class)) {
+        pman_event.string_value = lv_textarea_get_text(obj);
+    } else if (lv_obj_check_type(obj, &lv_slider_class)) {
+        pman_event.value = lv_slider_get_value(obj);
+    } else if (lv_obj_check_type(obj, &lv_keyboard_class)) {
+        lv_obj_t *ta = lv_keyboard_get_textarea(obj);
+        if (ta != NULL) {
+            pman_event.string_value = lv_textarea_get_text(ta);
+        }
+    } else if (lv_obj_check_type(obj, &lv_btnmatrix_class) && lv_event_get_code(event) == LV_EVENT_VALUE_CHANGED) {
+        pman_event.value = lv_btnmatrix_get_selected_btn(obj);
+    } else if ((lv_obj_check_type(obj, &lv_tabview_class) || lv_obj_check_type(obj, &custom_tabview_class)) &&
+               lv_event_get_code(event) == LV_EVENT_VALUE_CHANGED) {
+        pman_event.value = lv_tabview_get_tab_act(obj);
     }
+
     view_event(pman_event);
 }
 

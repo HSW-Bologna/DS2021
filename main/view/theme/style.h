@@ -5,9 +5,8 @@
 #include "lvgl.h"
 
 
-void style_init(void);
-
-
-extern lv_style_t style_icon_button;
+extern const lv_style_t style_icon_button;
+extern const lv_style_t style_transparent_container;
+extern const lv_style_t style_title;
 
 #endif

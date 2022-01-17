@@ -8,5 +8,42 @@ CONFIGURAZIONE, Configurazione, Configuration
 DIAGNOSI, Diagnosi, Diagnose
 TEST_MACCHINA, Test macchina, Machine test
 PARAMETRI, Parametri, Parameters
+PROGRAMMI, Programmi, Programmi
 DEFAULT, Default, Default
 LIMITE_PARAMETRO, Il valore inserito non è valido; il parametro è stato corretto al limite più vicino, Invalid value; the parameter has been corrected to the closest limit
+NUOVO_PROGRAMMA, Nuovo programma, New program
+NUOVO_PASSO, Nuovo passo, New step
+NOME_PROGRAMMA, Nome programma, Program name
+PROGRAMMA, Programma, Program
+DURATA, Durata, Duration
+TIPO, Tipo, Type
+TEMPERATURA, Temperatura, Temperature
+PAGAMENTO, Pagamento, Payment
+GETTONE, Gettone, Coin
+CASSA, Cassa, Cash desk
+AZZERA, Azzera, Clear
+MACCHINA_IN_FUNZIONE_CONTROLLO_DISABILITATO, Macchina in funzione; il controllo e' disabilitato, The machine is running; control is disabled
+STATISTICHE, Statistiche, Stats
+VERBALE, Verbale, Log
+EVENTI, Eventi, Events
+VERSIONE, Versione, Version
+DATA, Data, Date
+INTERFACCIA, Interfaccia, Interface
+MACCHINA, Macchina, Machine
+SISTEMA_OPERATIVO, Sistema operativo, Operating system
+IMPOSTAZIONI_DI_RETE, Impostazioni di rete, Network settings
+NON_CONNESSO, Non connesso, Not connected
+CONNESSO_A, Connesso a, Connected to
+CONNESSIONE_IN_CORSO, Connessione in corso, Connecting
+PASSWORD, Password, Password
+CONFIGURAZIONE_SALVATA, Configurazione salvata con successo, Configuration saved successfully
+PASSWORD_ERRATA, Password errata, Wrong password
+CODICE_ACCESSO_UTENTE, Codice di accesso per l'utente, User access code
+NESSUNO, Nessuno, None
+SCELTA_PROGRAMMA, SCELTA PROGRAMMA, SELECT A PROGRAM
+NESSUN_PROGRAMMA, NESSUN PROGRAMMA, NO PROGRAM AVAILABLE
+IMPOSTAZIONI, Impostazioni, Settings
+LIVELLO_DI_ACCESSO, Livello di accesso, Access level
+CODICE_ALLARME, Codice allarme, Alarm code
+OBLO_APERTO, Attenzione: l'oblo e' aperto., Warning: the porthole is open.
+EMERGENZA, Attenzione: e' stato premuto il tasto di emergenza!, Warning: the emergency button was pressed!

@@ -12,27 +12,57 @@
 #define TECH_BITS 0x02
 
 
+static const char *secfmt = "%i s";
+static const char *msfmt  = "%02i:%02i";
+
 
 
 void parmac_init(model_t *pmodel) {
     assert(pmodel != NULL);
-#define DESC parameters_parmac
+#define DESC parameters_desc
 
-    parmac_t           *p    = &pmodel->parmac;
+    parmac_t           *p    = &pmodel->configuration.parmac;
     parameter_handle_t *pars = pmodel->parameter_mac;
     size_t              i    = 0;
 
     // clang-format off
-    pars[i++] = PARAMETER(&p->lingua,                   LINGUA_ITALIANO,     NUM_LINGUE - 1,     LINGUA_ITALIANO,    ((pudata_t){.t = PTYPE_DROPDOWN, .desc = DESC[PARAMETERS_PARMAC_LINGUA], .values = (const char***)parameters_lingue}),                     USER_BITS);
-    pars[i++] = PARAMETER(&p->abilita_gas,              0,                   1,                  0,                  ((pudata_t){.t = PTYPE_SWITCH, .desc = DESC[PARAMETERS_PARMAC_ABILITA_GAS], .values = (const char***)parameters_abilitazione}),            USER_BITS);
-    pars[i++] = PARAMETER(&p->velocita_minima,          0,                   100,                0,                  ((pudata_t){.t = PTYPE_NUMBER, .desc = DESC[PARAMETERS_PARMAC_VELOCITA_MINIMA], .fmt = "%i RPM"}),                                         USER_BITS);
-    pars[i++] = PARAMETER(&p->tempo_gettone,            5,                   300,                30,                 ((pudata_t){.t = PTYPE_TIME, .desc = DESC[PARAMETERS_PARMAC_TEMPO_GETTONE], .fmt = "%i s"}),                                               USER_BITS);
-    pars[i++] = PARAMETER(&p->access_level,             0,                   1,                  0,                  ((pudata_t){.t = PTYPE_DROPDOWN}),                                                                                                         TECH_BITS);
+    pars[i++] = PARAMETER(&p->lingua,                                   LINGUA_ITALIANO,                NUM_LINGUE - 1,             LINGUA_ITALIANO,                ((pudata_t){.t = PTYPE_DROPDOWN, .desc = DESC[PARAMETERS_DESC_LINGUA], .values = (const char***)parameters_lingue}),                                        USER_BITS);
+    pars[i++] = PARAMETER(&p->abilita_visualizzazione_temperatura,      0,                              1,                          0,                              ((pudata_t){.t = PTYPE_SWITCH, .desc = DESC[PARAMETERS_DESC_VISUALIZZAZIONE_TEMPERATURA], .values = (const char***)parameters_abilitazione}),               USER_BITS);
+    pars[i++] = PARAMETER(&p->tempo_pressione_tasto_pausa,              0,                              10,                         0,                              ((pudata_t){.t = PTYPE_TIME, .desc = DESC[PARAMETERS_DESC_TEMPO_PRESSIONE_PAUSA], .fmt = secfmt}),                                                          USER_BITS);
+    pars[i++] = PARAMETER(&p->tempo_pressione_tasto_stop,               0,                              10,                         5,                              ((pudata_t){.t = PTYPE_TIME, .desc = DESC[PARAMETERS_DESC_TEMPO_PRESSIONE_STOP], .fmt = secfmt}),                                                           USER_BITS);
+    pars[i++] = PARAMETER(&p->tempo_stop_automatico,                    0,                              10,                         0,                              ((pudata_t){.t = PTYPE_TIME, .desc = DESC[PARAMETERS_DESC_TEMPO_STOP_AUTOMATICO], .fmt = secfmt}),                                                          USER_BITS);
+    pars[i++] = PARAMETER(&p->abilita_espansione_rs485,                 0,                              1,                          0,                              ((pudata_t){.t = PTYPE_SWITCH, .desc = DESC[PARAMETERS_DESC_ABILITA_EXP_RS485], .values = (const char***)parameters_abilitazione}),                         USER_BITS);
+    pars[i++] = PARAMETER(&p->abilita_gas,                              0,                              1,                          0,                              ((pudata_t){.t = PTYPE_SWITCH, .desc = DESC[PARAMETERS_DESC_ABILITA_GAS], .values = (const char***)parameters_abilitazione}),                               USER_BITS);
+    pars[i++] = PARAMETER(&p->velocita_minima,                          0,                              100,                        0,                              ((pudata_t){.t = PTYPE_NUMBER, .desc = DESC[PARAMETERS_DESC_VELOCITA_MINIMA], .fmt = "%i RPM"}),                                                            USER_BITS);
+    pars[i++] = PARAMETER(&p->tempo_gettone,                            5,                              300,                        30,                             ((pudata_t){.t = PTYPE_TIME, .desc = DESC[PARAMETERS_DESC_TEMPO_GETTONE], .fmt = msfmt, .min_sec = 1}),                                                     USER_BITS);
+    pars[i++] = PARAMETER(&p->max_programs,                             1,                              MAX_PROGRAMS,               (MAX_PROGRAMS/2),               ((pudata_t){.t = PTYPE_NUMBER, .desc=DESC[PARAMETERS_DESC_MAX_PROGRAMMI]}),                                                                                 USER_BITS);
+    pars[i++] = PARAMETER(&p->temperatura_sicurezza_in,                 0,                              50,                         100,                            ((pudata_t){.t = PTYPE_NUMBER, .desc=DESC[PARAMETERS_DESC_TEMPERATURA_SICUREZZA_IN], .fmt = "%i C"}),                                                       USER_BITS);
+    pars[i++] = PARAMETER(&p->temperatura_sicurezza_out,                0,                              50,                         100,                            ((pudata_t){.t = PTYPE_NUMBER, .desc=DESC[PARAMETERS_DESC_TEMPERATURA_SICUREZZA_OUT], .fmt = "%i C"}),                                                      USER_BITS);
+    pars[i++] = PARAMETER(&p->tempo_allarme_temperatura,                60,                             1200,                       300,                            ((pudata_t){.t = PTYPE_TIME, .desc = DESC[PARAMETERS_DESC_TEMPO_ALLARME_TEMPERATURA], .fmt = secfmt}),                                                      USER_BITS);
+    pars[i++] = PARAMETER(&p->allarme_inverter_off_on,                  0,                              1,                          0,                              ((pudata_t){.t = PTYPE_SWITCH, .desc = DESC[PARAMETERS_DESC_ALLARME_INVERTER], .values = (const char***)parameters_abilitazione}),                          USER_BITS);
+    pars[i++] = PARAMETER(&p->allarme_filtro_off_on,                    0,                              1,                          0,                              ((pudata_t){.t = PTYPE_SWITCH, .desc = DESC[PARAMETERS_DESC_ALLARME_INVERTER], .values = (const char***)parameters_abilitazione}),                          USER_BITS);
+    pars[i++] = PARAMETER(&p->inverti_macchina_occupata,                0,                              1,                          0,                              ((pudata_t){.t = PTYPE_SWITCH, .desc = DESC[PARAMETERS_DESC_INVERTI_MACCHINA_OCCUPATA], .values = (const char***)parameters_abilitazione}),                 USER_BITS);
+    pars[i++] = PARAMETER(&p->tipo_macchina_occupata,                   0,                              2,                          0,                              ((pudata_t){.t = PTYPE_DROPDOWN, .desc = DESC[PARAMETERS_DESC_TIPO_MACCHINA_OCCUPATA], .values = (const char***)parameters_tipo_macchina_occupata}),        USER_BITS);
+    pars[i++] = PARAMETER(&p->tipo_riscaldamento,                       TIPO_RISCALDAMENTO_GAS,         TIPO_RISCALDAMENTO_VAPORE,  TIPO_RISCALDAMENTO_ELETTRICO,   ((pudata_t){.t = PTYPE_DROPDOWN, .desc = DESC[PARAMETERS_DESC_TIPO_RISCALDAMENTO], .values = (const char***)parameters_riscaldamento}),                     USER_BITS);
+    pars[i++] = PARAMETER(&p->access_level,                             0,                              1,                          0,                              ((pudata_t){.t = PTYPE_DROPDOWN, .desc = DESC[PARAMETERS_DESC_LIVELLO_ACCESSO], .values = (const char***)parameters_livello_accesso}),                      TECH_BITS);
+    pars[i++] = PARAMETER(&p->autoavvio,                                0,                              1,                          0,                              ((pudata_t){.t = PTYPE_SWITCH, .desc = DESC[PARAMETERS_DESC_AUTOAVVIO], .values = (const char***)parameters_abilitazione}),                                 USER_BITS);
     // clang-format on
 
     parameter_check_ranges(pars, i);
 
 #undef DESC
+}
+
+
+void parmac_reset_to_defaults(model_t *pmodel) {
+    assert(pmodel != NULL);
+    parameter_reset_to_defaults(pmodel->parameter_mac, NUM_PARMAC);
+}
+
+
+void parmac_check_ranges(model_t *pmodel) {
+    assert(pmodel != NULL);
+    parameter_check_ranges(pmodel->parameter_mac, NUM_PARMAC);
 }
 
 
@@ -50,34 +80,7 @@ const char *parmac_get_description(model_t *pmodel, size_t num) {
 
 
 const char *parmac_to_string(model_t *pmodel, char *string, size_t len, size_t num) {
-    assert(pmodel != NULL);
-    parameter_handle_t *par =
-        parameter_get_handle(pmodel->parameter_mac, NUM_PARMAC, num, model_get_access_level(pmodel));
-
-    pudata_t data = parameter_get_user_data(par);
-
-    switch (data.t) {
-        case PTYPE_SWITCH:
-        case PTYPE_DROPDOWN: {
-            size_t index = parameter_to_index(par);
-            return model_parameter_to_string(pmodel, par, index);
-        }
-
-        case PTYPE_NUMBER: {
-            long value = parameter_to_long(par);
-            snprintf(string, len, data.fmt, value);
-            return (const char *)string;
-        }
-
-        case PTYPE_TIME: {
-            long value = parameter_to_long(par);
-            snprintf(string, len, "%02li:%02li", value / 60, value % 60);
-            return (const char *)string;
-        }
-
-        default:
-            assert(0);
-    }
+    return model_format_parameter_value(pmodel, pmodel->parameter_mac, NUM_PARMAC, string, len, num);
 }
 
 

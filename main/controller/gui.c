@@ -4,7 +4,7 @@
 #include "lvgl.h"
 #include "gel/timer/timecheck.h"
 #include "view/view.h"
-
+#include "buzzer.h"
 
 
 void controller_gui_manage(model_t *pmodel) {
@@ -21,6 +21,10 @@ void controller_gui_manage(model_t *pmodel) {
     lv_timer_handler();
 
     while (view_get_next_msg(pmodel, &umsg, &event)) {
+        if (event.code == VIEW_EVENT_CODE_LVGL && event.event == LV_EVENT_CLICKED) {
+            buzzer_beep(1, 50);
+        }
+
         controller_process_msg(&umsg.cmsg, pmodel);
         view_process_msg(umsg.vmsg, pmodel);
     }

@@ -134,10 +134,29 @@ def main():
                  simulated_prog, simulated_env)
     compileDB = simulated_env.CompilationDatabase('compile_commands.json')
 
+    ip_addr = ARGUMENTS.get("ip", "")
     PhonyTargets(
-        "scp", f"scp -o StrictHostKeyChecking=no DS2021 root@{ARGUMENTS.get('ip', '')}:/tmp/app", [target_prog])
+        'kill-remote',
+        f"ssh -o StrictHostKeyChecking=no root@{ip_addr} 'killall gdbserver; killall app; killall sh'; true", None)
     PhonyTargets(
-        'ssh', f"ssh -o StrictHostKeyChecking=no root@{ARGUMENTS.get('ip', '')}", [])
+        "scp", f"scp -o StrictHostKeyChecking=no DS2021 root@{ip_addr}:/tmp/app", [target_prog, "kill-remote"])
+    PhonyTargets(
+        'ssh', f"ssh -o StrictHostKeyChecking=no root@{ip_addr}", [])
+    PhonyTargets(
+        'run-remote',
+        f"ssh -o StrictHostKeyChecking=no root@{ip_addr} /tmp/app",
+        'scp')
+    PhonyTargets(
+        "update-remote",
+        f'ssh -o StrictHostKeyChecking=no root@{ip_addr} "mount -o rw,remount / && cp /tmp/app /root/app && sync && reboot && exit"', "scp")
+    PhonyTargets(
+        "debug",
+        f"ssh -o StrictHostKeyChecking=no root@{ip_addr} gdbserver localhost:1235 /tmp/app", "scp")
+    PhonyTargets(
+        "run-remote",
+        f"ssh -o StrictHostKeyChecking=no root@{ip_addr} /tmp/app",
+        "scp")
+
     Depends(simulated_prog, compileDB)
     Default(simulated_prog)
     Alias("target", target_prog)

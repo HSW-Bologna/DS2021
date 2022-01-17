@@ -3,18 +3,42 @@
 #include "common.h"
 #include "model/parmac.h"
 #include "intl/intl.h"
+#include "theme/style.h"
+
+
+static void delete_obj_timer(lv_timer_t *timer);
+
+
+lv_obj_t *view_common_back_button(lv_obj_t *parent, int id) {
+    lv_obj_t *btn = lv_btn_create(lv_scr_act());
+    // lv_obj_add_style(btn, (lv_style_t *)&style_icon_button, LV_STATE_DEFAULT);
+    lv_obj_t *lbl = lv_label_create(btn);
+    lv_label_set_text(lbl, LV_SYMBOL_LEFT);
+    lv_obj_set_size(btn, 64, 64);
+    lv_obj_align(btn, LV_ALIGN_TOP_LEFT, 0, 0);
+    view_register_object_default_callback(btn, id);
+
+    return btn;
+}
+
+
+lv_obj_t *view_common_create_blanket(lv_obj_t *parent) {
+    lv_obj_t *root = lv_obj_create(parent);
+    lv_obj_set_style_radius(root, 0, LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(root, LV_OPA_40, LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(root, lv_color_black(), LV_STATE_DEFAULT);
+    lv_obj_set_size(root, LV_PCT(100), LV_PCT(100));
+    return root;
+}
 
 
 lv_obj_t *view_common_create_popup(lv_obj_t *parent, int covering) {
-    const int sizex = 320;
-    const int sizey = 240;
+    const int sizex = 480;
+    const int sizey = 360;
 
     lv_obj_t *root;
     if (covering) {
-        root = lv_obj_create(parent);
-        lv_obj_set_style_bg_opa(root, LV_OPA_40, LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_color(root, lv_color_black(), LV_STATE_DEFAULT);
-        lv_obj_set_size(root, LV_PCT(100), LV_PCT(100));
+        root = view_common_create_blanket(parent);
     } else {
         root = parent;
     }
@@ -28,21 +52,30 @@ lv_obj_t *view_common_create_popup(lv_obj_t *parent, int covering) {
 }
 
 
-lv_obj_t *view_common_create_info_popup(lv_obj_t *parent, int covering, const char *text, const char *confirm_text,
-                                        int confirm_id) {
+lv_obj_t *view_common_create_info_popup(lv_obj_t *parent, int covering, lv_img_dsc_t *src, const char *text,
+                                        const char *confirm_text, int confirm_id) {
     lv_obj_t *popup = view_common_create_popup(parent, covering);
 
     lv_obj_t *btn = lv_btn_create(popup);
     lv_obj_t *lbl = lv_label_create(btn);
     lv_label_set_text(lbl, confirm_text);
     lv_obj_align(btn, LV_ALIGN_BOTTOM_MID, 0, -8);
+    if (lv_obj_get_width(btn) < 120) {
+        lv_obj_set_width(btn, 120);
+    }
     view_register_object_default_callback(btn, confirm_id);
+
+    if (src != NULL) {
+        lv_obj_t *img = lv_img_create(popup);
+        lv_img_set_src(img, src);
+        lv_obj_align(img, LV_ALIGN_TOP_MID, 0, 0);
+    }
 
     lbl = lv_label_create(popup);
     lv_label_set_long_mode(lbl, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(lbl, LV_PCT(90));
     lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_CENTER, LV_STATE_DEFAULT);
-    lv_obj_align(lbl, LV_ALIGN_CENTER, 0, -8);
+    lv_obj_align(lbl, LV_ALIGN_CENTER, 0, 8);
     lv_label_set_text(lbl, text);
 
     return popup;
@@ -76,15 +109,32 @@ lv_obj_t *view_common_create_choice_popup(lv_obj_t *parent, int covering, const 
 }
 
 
+lv_obj_t *view_common_create_title(lv_obj_t *parent, const char *title, int back_id) {
+    lv_obj_t *back = view_common_back_button(parent, back_id);
 
-lv_obj_t *view_common_build_param_editor(lv_obj_t *root, model_t *pmodel, parameter_handle_t *par, size_t num,
-                                         int dd_id, int sw_id, int ta_id, int kb_id, int roller1_id, int roller2_id,
-                                         int cancel_id, int confirm_id, int default_id) {
+    lv_obj_t *cont = lv_obj_create(lv_scr_act());
+    lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scrollbar_mode(cont, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_size(cont, LV_HOR_RES - lv_obj_get_width(back) - 80, 50);
+    lv_obj_align_to(cont, back, LV_ALIGN_OUT_RIGHT_MID, 4, 0);
+    lv_obj_add_style(cont, (lv_style_t *)&style_title, LV_STATE_DEFAULT);
+
+    lv_obj_t *lbl = lv_label_create(cont);
+    lv_label_set_text(lbl, title);
+    lv_obj_align(lbl, LV_ALIGN_LEFT_MID, 16, 0);
+
+    return back;
+}
+
+
+lv_obj_t *view_common_build_param_editor(lv_obj_t *root, lv_obj_t **textarea, model_t *pmodel, parameter_handle_t *par,
+                                         size_t num, int dd_id, int sw_id, int ta_id, int kb_id, int roller1_id,
+                                         int roller2_id, int cancel_id, int confirm_id, int default_id) {
     char      options[512] = {0};
     lv_obj_t *cont         = lv_obj_create(root);
     int       len;
 
-    lv_obj_set_size(cont, LV_PCT(30), LV_PCT(95));
+    lv_obj_set_size(cont, LV_PCT(32), LV_PCT(95));
     lv_obj_align(cont, LV_ALIGN_RIGHT_MID, -10, 0);
     lv_obj_set_scrollbar_mode(cont, LV_SCROLLBAR_MODE_OFF);
 
@@ -119,6 +169,8 @@ lv_obj_t *view_common_build_param_editor(lv_obj_t *root, model_t *pmodel, parame
     lv_obj_set_size(btn, 120, 40);
     lv_obj_align(btn, LV_ALIGN_BOTTOM_MID, 0, -54);
 
+    *textarea = NULL;
+
     switch (type) {
         case PTYPE_DROPDOWN: {
             unsigned long max = parameter_get_total_values(par);
@@ -129,7 +181,7 @@ lv_obj_t *view_common_build_param_editor(lv_obj_t *root, model_t *pmodel, parame
                     len++;
                 }
 
-                strcpy(&options[len], model_parameter_to_string(pmodel, par, i));
+                strcpy(&options[len], model_parameter_value_to_string(pmodel, par, i));
             }
 
             lv_obj_t *list = lv_dropdown_create(cont);
@@ -161,12 +213,13 @@ lv_obj_t *view_common_build_param_editor(lv_obj_t *root, model_t *pmodel, parame
         case PTYPE_NUMBER: {
             char      string[64];
             lv_obj_t *ta = lv_textarea_create(cont);
-            lv_obj_set_width(ta, 180);
+            lv_obj_set_size(ta, 180, 56);
             lv_textarea_set_one_line(ta, 1);
             snprintf(string, 64, "%li", parameter_to_long(par));
             lv_textarea_set_text(ta, string);
             lv_obj_align(ta, LV_ALIGN_TOP_MID, 0, 40);
             lv_obj_add_state(ta, LV_STATE_FOCUSED);
+            *textarea = ta;
 
             lv_obj_t *msg = lv_label_create(cont);
             lv_label_set_recolor(msg, 1);
@@ -194,7 +247,7 @@ lv_obj_t *view_common_build_param_editor(lv_obj_t *root, model_t *pmodel, parame
             lv_keyboard_set_mode(kb, LV_KEYBOARD_MODE_NUMBER);
             lv_obj_align_to(kb, ta, LV_ALIGN_OUT_BOTTOM_MID, 0, 30);
             lv_keyboard_set_map(kb, LV_KEYBOARD_MODE_NUMBER, kbmap, ctrl_map);
-            view_register_object_default_callback(kb, kb_id);
+            view_register_keyboard_plus_minus_callback(kb, kb_id);
             break;
         }
 
@@ -276,4 +329,121 @@ void view_common_roller_set_number(lv_obj_t *roller, int num) {
 
     lv_roller_set_options(roller, string, LV_ROLLER_MODE_NORMAL);
     free(string);
+}
+
+
+
+void view_common_select_btn_in_list(lv_obj_t *list, size_t num, int selected) {
+    for (size_t i = 0; i < num; i++) {
+        lv_obj_t *btn = lv_obj_get_child(list, i);
+
+        if (btn == NULL) {
+            continue;
+        }
+
+        if ((size_t)selected == i) {
+            lv_obj_add_state(btn, LV_STATE_CHECKED);
+        } else {
+            lv_obj_clear_state(btn, LV_STATE_CHECKED);
+        }
+    }
+}
+
+
+lv_obj_t *view_common_icon_button(lv_obj_t *parent, char *symbol, int id) {
+    lv_obj_t *btn = lv_btn_create(parent);
+    lv_obj_t *lbl = lv_label_create(btn);
+    lv_label_set_text(lbl, symbol);
+    lv_obj_set_size(btn, 64, 64);
+    lv_obj_align(lbl, LV_ALIGN_CENTER, 0, 0);
+    view_register_object_default_callback(btn, id);
+
+    return btn;
+}
+
+
+lv_obj_t *view_common_toast(const char *msg) {
+    lv_obj_t *obj = view_common_toast_with_parent(msg, lv_layer_top());
+    return obj;
+}
+
+
+lv_obj_t *view_common_toast_with_parent(const char *msg, lv_obj_t *parent) {
+    lv_obj_t *obj = lv_obj_create(parent);
+    lv_obj_set_width(obj, 400);
+    lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *lbl = lv_label_create(obj);
+    lv_label_set_long_mode(lbl, LV_LABEL_LONG_WRAP);
+    lv_label_set_text(lbl, msg);
+    lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_CENTER, LV_STATE_DEFAULT);
+    lv_obj_align(lbl, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_width(lbl, 380);
+    if (lv_obj_get_height(lbl) > 84) {
+        lv_obj_set_height(obj, lv_obj_get_height(lbl) + 20);
+    } else {
+        lv_obj_set_height(obj, 64);
+    }
+
+    lv_obj_align(obj, LV_ALIGN_BOTTOM_MID, 0, -40);
+
+    lv_timer_t *timer = lv_timer_create(delete_obj_timer, 5000, obj);
+    lv_timer_set_repeat_count(timer, 1);
+
+    return obj;
+}
+
+
+lv_obj_t *view_common_create_password_popup(lv_obj_t *parent, int kb_id, int hidden) {
+    lv_obj_t *blanket = view_common_create_blanket(parent);
+
+    lv_obj_t *cont = lv_obj_create(blanket);
+    lv_obj_set_size(cont, 320, 480);
+
+    lv_obj_t *ta = lv_textarea_create(cont);
+    lv_textarea_set_text(ta, "");
+    lv_textarea_set_one_line(ta, 1);
+    lv_textarea_set_password_mode(ta, hidden);
+    lv_textarea_set_max_length(ta, PASSWORD_MAX_SIZE);
+    lv_obj_set_height(ta, 56);
+    lv_obj_align(ta, LV_ALIGN_TOP_MID, 0, 0);
+
+    lv_obj_t *kb = lv_keyboard_create(cont);
+    view_register_object_default_callback(kb, kb_id);
+
+    static const char *keys[] = {
+        "1", "2", "3", LV_SYMBOL_BACKSPACE, "\n", "4", "5", "6", LV_SYMBOL_CLOSE, "\n",
+        "7", "8", "9", LV_SYMBOL_OK,        "\n", "0", "",
+    };
+    static const lv_btnmatrix_ctrl_t ctrl_map[] = {
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    };
+    lv_keyboard_set_map(kb, LV_KEYBOARD_MODE_NUMBER, keys, ctrl_map);
+    lv_keyboard_set_textarea(kb, ta);
+    lv_keyboard_set_mode(kb, LV_KEYBOARD_MODE_NUMBER);
+    lv_obj_set_height(kb, 320);
+
+    lv_obj_align(cont, LV_ALIGN_CENTER, 0, 0);
+
+    return blanket;
+}
+
+
+lv_obj_t *view_common_create_image_button(lv_obj_t *parent, const lv_img_dsc_t *src_on, const lv_img_dsc_t *src_off,
+                                          int id) {
+    lv_obj_t *btn = lv_imgbtn_create(lv_scr_act());
+    lv_imgbtn_set_src(btn, LV_IMGBTN_STATE_RELEASED, NULL, src_on, NULL);
+    lv_imgbtn_set_src(btn, LV_IMGBTN_STATE_PRESSED, NULL, src_on, NULL);
+    lv_imgbtn_set_src(btn, LV_IMGBTN_STATE_DISABLED, NULL, src_off, NULL);
+    lv_obj_set_style_img_recolor(btn, lv_color_make(0xFF, 0xFF, 0xFF), LV_STATE_PRESSED);
+    lv_obj_set_style_img_recolor_opa(btn, LV_OPA_30, LV_STATE_PRESSED);
+    lv_obj_set_width(btn, src_on->header.w);
+    view_register_object_default_callback(btn, id);
+
+    return btn;
+}
+
+
+static void delete_obj_timer(lv_timer_t *timer) {
+    lv_obj_del(timer->user_data);
 }

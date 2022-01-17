@@ -1,0 +1,36 @@
+Identificatore, Italiano, Inglese
+LINGUA, Lingua, Language
+ABILITA_GAS, Abilita gas, Enable gas
+ABILITA_EXP_RS485, Abilita espansione I/O RS485, Enable RS485 I/O expansion
+VELOCITA_MINIMA, Velocita' minima, Minimum speed
+TEMPO_GETTONE, Tempo gettone, Token time
+TEMPO_MARCIA, Tempo di marcia, Rotation time
+MAX_PROGRAMMI, Numero massimo di programmi, Max number of programs
+TIPO_ASCIUGATURA, Tipo asciugatura, Drying type
+TIPO_RAFFREDDAMENTO, Tipo raffreddamento, Cooling type
+TEMPO_DI_PAUSA, Tempo di pausa, Pause time
+DURATA, Durata, Duration
+TEMPERATURA, Temperatura, Temperature
+VELOCITA, Velocita, Speed
+UMIDITA, Umidita', Humidity
+DURATA_MASSIMA, Durata massima, Maximum duration
+CICLI_MASSIMI, Numero massimo di cicli, Maximum number of cycles
+RITARDO_IN_PARTENZA, Ritardo in partenza, Start delay
+TEMPERATURA_SICUREZZA_IN, Temperatura di sicurezza in ingresso, Entrance safety temperature
+TEMPERATURA_SICUREZZA_OUT, Temperatura di sicurezza in uscita, Exit safety temperature
+TEMPO_ALLARME_TEMPERATURA, Ritardo di allarme temperatura, Temperature alarm delay
+ALLARME_INVERTER, Allarme inverter, Inverter alarm
+ALLARME_FILTRO, Allarme filtro, Filter alarm
+ATTESA_TEMPERATURA, Attesa temperatura, Wait for temperature
+INVERSIONE, Inversione, Inversion
+INVERTI_MACCHINA_OCCUPATA, Inverti il segnale di macchina occupata, Invert busy signal
+TIPO_RISCALDAMENTO, Tipo riscaldamento, Heating mode
+LIVELLO_ACCESSO, Livello di accesso, Access level
+TIPO_MACCHINA_OCCUPATA, Gestione del segnale di macchina occupata, Busy line management
+VISUALIZZAZIONE_TEMPERATURA, Visualizzazione temperatura, Temperature display
+TEMPO_PRESSIONE_PAUSA, Tempo di pressione del tasto pausa, Pause button press time
+TEMPO_PRESSIONE_STOP, Tempo di pressione del tasto arresto, Stop button press time
+TEMPO_STOP_AUTOMATICO, Tempo di azzeramento automatico del ciclo, Automatic cycle stop
+TEMPO_ATTESA_DEODORIZZAZIONE, Tempo di attesa per la deodorizzazione, Deodorant period delay
+TEMPO_DEODORIZZAZIONE, Tempo di deodorizzazione, Deodorant period duration
+AUTOAVVIO, Avvio automatico, Automatic start

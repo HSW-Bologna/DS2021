@@ -19,8 +19,10 @@ lv_timer_t *view_register_periodic_timer(size_t period, int code);
 void        view_register_object_default_callback_with_number(lv_obj_t *obj, int id, int number);
 void        view_register_object_default_callback(lv_obj_t *obj, int id);
 void        view_event(view_event_t event);
+void        view_register_keyboard_plus_minus_callback(lv_obj_t *kb, int id);
 
 
-extern const pman_page_t page_splash, page_test, page_main, page_settings;
+extern const pman_page_t page_splash, page_test, page_main, page_settings, page_program, page_step, page_network,
+    page_log, page_tech_settings;
 
 #endif

@@ -1,4 +1,7 @@
+#include <sys/stat.h>
+#include <assert.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #include "lvgl.h"
 #include "sdl/sdl.h"
@@ -9,10 +12,22 @@
 #include "controller/controller.h"
 #include "controller/gui.h"
 #include "config/app_conf.h"
+#include "utils/system_time.h"
+#include "log.h"
+
+
+static void log_file_init(void);
+static void log_lock(void *arg, int op);
+
+
+static pthread_mutex_t lock;
 
 
 int main(int argc, char *argv[]) {
     model_t model;
+
+    log_set_level(CONFIG_LOG_LEVEL);
+    log_file_init();
 
     model_init(&model);
 
@@ -37,4 +52,19 @@ int main(int argc, char *argv[]) {
     }
 
     return 0;
+}
+
+
+static void log_file_init(void) {
+    assert(pthread_mutex_init(&lock, NULL) == 0);
+    log_set_lock(log_lock);
+    log_set_udata(&lock);
+
+    log_set_fp(fopen(LOGFILE, "a+"));
+    log_set_fileinfo(0);
+}
+
+
+static void log_lock(void *arg, int op) {
+    op ? pthread_mutex_lock(arg) : pthread_mutex_unlock(arg);
 }

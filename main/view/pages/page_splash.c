@@ -17,6 +17,7 @@ static void open_page(model_t *pmodel, void *arg) {
 
     lv_timer_t *timer = view_register_periodic_timer(500, 0);
     lv_timer_set_repeat_count(timer, 1);
+    lv_timer_resume(timer);
 }
 
 
@@ -43,4 +44,5 @@ const pman_page_t page_splash = {
     .destroy       = view_destroy_all,
     .process_event = process_page_event,
     .open          = open_page,
+    .create        = create_page,
 };
