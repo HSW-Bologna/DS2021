@@ -9,6 +9,7 @@
 
 
 static char *new_unique_filename(model_t *pmodel, name_t filename, unsigned long seed);
+static int   name_intersection(name_t *as, int numa, name_t *bs, int numb);
 
 
 static const name_t default_program_names[NUM_LINGUE] = {
@@ -34,9 +35,11 @@ void model_init(model_t *pmodel) {
     pmodel->run.program_number = 0;
     pmodel->run.step_number    = 0;
 
-    pmodel->system.networks     = 0;
-    pmodel->system.num_networks = 0;
-    pmodel->system.connected    = 0;
+    pmodel->system.networks           = 0;
+    pmodel->system.num_networks       = 0;
+    pmodel->system.connected          = 0;
+    pmodel->system.drive_machines     = NULL;
+    pmodel->system.num_drive_machines = 0;
 
     parmac_init(pmodel);
 }
@@ -60,6 +63,12 @@ int model_is_in_test(model_t *pmodel) {
 }
 
 
+int model_is_machine_communication_active(model_t *pmodel) {
+    assert(pmodel != NULL);
+    return (pmodel->machine.communication_enabled && !pmodel->machine.communication_error);
+}
+
+
 int model_is_machine_communication_ok(model_t *pmodel) {
     assert(pmodel != NULL);
     return (!pmodel->machine.communication_enabled || !pmodel->machine.communication_error);
@@ -75,6 +84,12 @@ void model_set_machine_communication_error(model_t *pmodel, int error) {
 void model_set_machine_communication(model_t *pmodel, int enabled) {
     assert(pmodel != NULL);
     pmodel->machine.communication_enabled = enabled;
+}
+
+
+int model_is_machine_communication_enabled(model_t *pmodel) {
+    assert(pmodel != NULL);
+    return pmodel->machine.communication_enabled;
 }
 
 
@@ -183,9 +198,15 @@ int model_update_machine_state(model_t *pmodel, uint16_t state, uint16_t step_ty
 int model_should_autostop(model_t *pmodel) {
     assert(pmodel != NULL);
 
-    return pmodel->machine.state == MACHINE_STATE_PAUSED && pmodel->configuration.parmac.tempo_stop_automatico > 0 &&
-           is_expired(pmodel->run.autostop_ts, get_millis(),
-                      pmodel->configuration.parmac.tempo_stop_automatico * 1000UL);
+    alarm_code_t code = ALARM_CODE_EMERGENZA;
+    if (model_get_worst_alarm(pmodel, &code, 0)) {
+        return code == ALARM_CODE_OBLO_APERTO && pmodel->machine.state == MACHINE_STATE_PAUSED &&
+               pmodel->configuration.parmac.tempo_stop_automatico > 0 &&
+               is_expired(pmodel->run.autostop_ts, get_millis(),
+                          pmodel->configuration.parmac.tempo_stop_automatico * 1000UL);
+    } else {
+        return 0;
+    }
 }
 
 
@@ -309,6 +330,70 @@ uint16_t model_get_remaining(model_t *pmodel) {
 }
 
 
+uint16_t *model_get_minimum_speed(model_t *pmodel) {
+    assert(pmodel != NULL);
+    return &pmodel->configuration.parmac.velocita_minima;
+}
+
+
+uint16_t *model_get_maximum_speed(model_t *pmodel) {
+    assert(pmodel != NULL);
+    return &pmodel->configuration.parmac.velocita_massima;
+}
+
+
+uint16_t *model_get_current_setpoint_parameter(model_t *pmodel) {
+    assert(pmodel != NULL);
+    parameters_step_t *step = model_get_current_step(pmodel);
+    if (step == NULL) {
+        return NULL;
+    }
+
+    switch (step->type) {
+        case DRYER_PROGRAM_STEP_TYPE_DRYING:
+            return &step->drying.temperature;
+        case DRYER_PROGRAM_STEP_TYPE_COOLING:
+            return &step->cooling.temperature;
+        default:
+            return NULL;
+    }
+}
+
+
+uint16_t *model_get_current_speed_parameter(model_t *pmodel) {
+    assert(pmodel != NULL);
+    parameters_step_t *step = model_get_current_step(pmodel);
+    if (step == NULL) {
+        return NULL;
+    }
+
+    switch (step->type) {
+        case DRYER_PROGRAM_STEP_TYPE_DRYING:
+            return &step->drying.speed;
+        case DRYER_PROGRAM_STEP_TYPE_UNFOLDING:
+            return &step->unfolding.speed;
+        default:
+            return NULL;
+    }
+}
+
+
+uint16_t *model_get_current_humidity_parameter(model_t *pmodel) {
+    assert(pmodel != NULL);
+    parameters_step_t *step = model_get_current_step(pmodel);
+    if (step == NULL) {
+        return NULL;
+    }
+
+    switch (step->type) {
+        case DRYER_PROGRAM_STEP_TYPE_DRYING:
+            return &step->drying.humidity;
+        default:
+            return NULL;
+    }
+}
+
+
 void model_swap_programs(model_t *pmodel, size_t first, size_t second) {
     if (first >= model_get_num_programs(pmodel))
         return;
@@ -343,23 +428,50 @@ size_t model_get_effective_outputs(model_t *pmodel) {
 }
 
 
+int model_is_drive_mounted(model_t *pmodel) {
+    assert(pmodel != NULL);
+    return pmodel->system.drive_mounted;
+}
+
+
+int model_update_drive_status(model_t *pmodel, int mounted) {
+    assert(pmodel != NULL);
+    if (pmodel->system.drive_mounted != mounted) {
+        pmodel->system.drive_mounted = mounted;
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+
 size_t model_serialize_parmac(uint8_t *buffer, parmac_t *parmac) {
     assert(parmac != NULL && buffer != NULL);
     size_t i = 0;
 
+    memcpy(&buffer[i], parmac->nome, sizeof(name_t));
+    i += sizeof(name_t);
+
     i += serialize_uint16_be(&buffer[i], parmac->lingua);
     i += serialize_uint16_be(&buffer[i], parmac->abilita_visualizzazione_temperatura);
+    i += serialize_uint16_be(&buffer[i], parmac->abilita_tasto_menu);
     i += serialize_uint16_be(&buffer[i], parmac->tempo_pressione_tasto_pausa);
     i += serialize_uint16_be(&buffer[i], parmac->tempo_pressione_tasto_stop);
     i += serialize_uint16_be(&buffer[i], parmac->tempo_stop_automatico);
+    i += serialize_uint16_be(&buffer[i], parmac->stop_tempo_ciclo);
+    i += serialize_uint16_be(&buffer[i], parmac->tempo_attesa_partenza_ciclo);
     i += serialize_uint16_be(&buffer[i], parmac->abilita_espansione_rs485);
     i += serialize_uint16_be(&buffer[i], parmac->abilita_gas);
     i += serialize_uint16_be(&buffer[i], parmac->velocita_minima);
+    i += serialize_uint16_be(&buffer[i], parmac->velocita_massima);
     i += serialize_uint16_be(&buffer[i], parmac->velocita_antipiega);
     i += serialize_uint16_be(&buffer[i], parmac->tipo_pagamento);
     i += serialize_uint16_be(&buffer[i], parmac->tempo_gettone);
 
     i += serialize_uint16_be(&buffer[i], parmac->tipo_sonda_temperatura);
+    i += serialize_uint16_be(&buffer[i], parmac->posizione_sonda_temperatura);
+    i += serialize_uint16_be(&buffer[i], parmac->temperatura_massima_ingresso);
+    i += serialize_uint16_be(&buffer[i], parmac->temperatura_massima_uscita);
     i += serialize_uint16_be(&buffer[i], parmac->temperatura_sicurezza_in);
     i += serialize_uint16_be(&buffer[i], parmac->temperatura_sicurezza_out);
     i += serialize_uint16_be(&buffer[i], parmac->tempo_allarme_temperatura);
@@ -371,6 +483,7 @@ size_t model_serialize_parmac(uint8_t *buffer, parmac_t *parmac) {
 
     i += serialize_uint16_be(&buffer[i], parmac->access_level);
     i += serialize_uint16_be(&buffer[i], parmac->autoavvio);
+    i += serialize_uint16_be(&buffer[i], parmac->abilita_allarmi);
 
     assert(i == PARMAC_SIZE);
     return i;
@@ -381,19 +494,29 @@ size_t model_deserialize_parmac(parmac_t *parmac, uint8_t *buffer) {
     assert(parmac != NULL && buffer != NULL);
     size_t i = 0;
 
+    memcpy(parmac->nome, &buffer[i], sizeof(name_t));
+    i += sizeof(name_t);
+
     i += deserialize_uint16_be(&parmac->lingua, &buffer[i]);
     i += deserialize_uint16_be(&parmac->abilita_visualizzazione_temperatura, &buffer[i]);
+    i += deserialize_uint16_be(&parmac->abilita_tasto_menu, &buffer[i]);
     i += deserialize_uint16_be(&parmac->tempo_pressione_tasto_pausa, &buffer[i]);
     i += deserialize_uint16_be(&parmac->tempo_pressione_tasto_stop, &buffer[i]);
     i += deserialize_uint16_be(&parmac->tempo_stop_automatico, &buffer[i]);
+    i += deserialize_uint16_be(&parmac->stop_tempo_ciclo, &buffer[i]);
+    i += deserialize_uint16_be(&parmac->tempo_attesa_partenza_ciclo, &buffer[i]);
     i += deserialize_uint16_be(&parmac->abilita_espansione_rs485, &buffer[i]);
     i += deserialize_uint16_be(&parmac->abilita_gas, &buffer[i]);
     i += deserialize_uint16_be(&parmac->velocita_minima, &buffer[i]);
+    i += deserialize_uint16_be(&parmac->velocita_massima, &buffer[i]);
     i += deserialize_uint16_be(&parmac->velocita_antipiega, &buffer[i]);
     i += deserialize_uint16_be(&parmac->tipo_pagamento, &buffer[i]);
     i += deserialize_uint16_be(&parmac->tempo_gettone, &buffer[i]);
 
     i += deserialize_uint16_be(&parmac->tipo_sonda_temperatura, &buffer[i]);
+    i += deserialize_uint16_be(&parmac->posizione_sonda_temperatura, &buffer[i]);
+    i += deserialize_uint16_be(&parmac->temperatura_massima_ingresso, &buffer[i]);
+    i += deserialize_uint16_be(&parmac->temperatura_massima_uscita, &buffer[i]);
     i += deserialize_uint16_be(&parmac->temperatura_sicurezza_in, &buffer[i]);
     i += deserialize_uint16_be(&parmac->temperatura_sicurezza_out, &buffer[i]);
     i += deserialize_uint16_be(&parmac->tempo_allarme_temperatura, &buffer[i]);
@@ -405,6 +528,7 @@ size_t model_deserialize_parmac(parmac_t *parmac, uint8_t *buffer) {
 
     i += deserialize_uint16_be(&parmac->access_level, &buffer[i]);
     i += deserialize_uint16_be(&parmac->autoavvio, &buffer[i]);
+    i += deserialize_uint16_be(&parmac->abilita_allarmi, &buffer[i]);
 
     assert(i == PARMAC_SIZE);
     return i;
@@ -629,7 +753,7 @@ uint16_t model_get_alarms(model_t *pmodel) {
 
 
 int model_update_sensors(model_t *pmodel, uint16_t *coins, uint16_t payment, uint16_t t1_adc, uint16_t t2_adc,
-                         uint16_t t1, uint16_t t2, uint16_t configured_temperature) {
+                         uint16_t t1, uint16_t t2, uint16_t actual_temperature, uint16_t actual_humidity) {
     assert(pmodel != NULL);
     int res = 0;
 
@@ -641,23 +765,28 @@ int model_update_sensors(model_t *pmodel, uint16_t *coins, uint16_t payment, uin
 
     if (pmodel->machine.adc_ptc1 != t1_adc || pmodel->machine.adc_ptc2 != t2_adc ||
         t1 != pmodel->machine.temperature_ptc1 || t2 != pmodel->machine.temperature_ptc2 ||
-        configured_temperature != pmodel->machine.configured_temperature) {
-        pmodel->machine.adc_ptc1               = t1_adc;
-        pmodel->machine.adc_ptc2               = t2_adc;
-        pmodel->machine.temperature_ptc1       = (int16_t)t1;
-        pmodel->machine.temperature_ptc2       = (int16_t)t2;
-        pmodel->machine.configured_temperature = (int16_t)configured_temperature;
-        res                                    = 1;
+        actual_temperature != pmodel->machine.actual_temperature ||
+        actual_humidity != pmodel->machine.actual_humidity) {
+        pmodel->machine.adc_ptc1           = t1_adc;
+        pmodel->machine.adc_ptc2           = t2_adc;
+        pmodel->machine.temperature_ptc1   = (int16_t)t1;
+        pmodel->machine.temperature_ptc2   = (int16_t)t2;
+        pmodel->machine.actual_temperature = (int16_t)actual_temperature;
+        pmodel->machine.actual_humidity    = (int16_t)actual_humidity / 100;
+        res                                = 1;
     }
 
     return res;
 }
 
 
-int model_current_setpoint(model_t *pmodel) {
+int model_current_temperature_setpoint(model_t *pmodel) {
     assert(pmodel != NULL);
     if (model_is_program_running(pmodel)) {
         parameters_step_t *s = model_get_current_step(pmodel);
+        if (s == NULL) {
+            return 0;
+        }
         switch (s->type) {
             case DRYER_PROGRAM_STEP_TYPE_DRYING:
                 return s->drying.temperature;
@@ -672,9 +801,34 @@ int model_current_setpoint(model_t *pmodel) {
 }
 
 
+int model_current_humidity_setpoint(model_t *pmodel) {
+    assert(pmodel != NULL);
+    if (model_is_program_running(pmodel)) {
+        parameters_step_t *s = model_get_current_step(pmodel);
+        if (s == NULL) {
+            return 0;
+        }
+        switch (s->type) {
+            case DRYER_PROGRAM_STEP_TYPE_DRYING:
+                return s->drying.humidity;
+            default:
+                return 0;
+        }
+    } else {
+        return 0;
+    }
+}
+
+
 int model_current_temperature(model_t *pmodel) {
     assert(pmodel != NULL);
-    return pmodel->machine.configured_temperature;
+    return pmodel->machine.actual_temperature;
+}
+
+
+int model_current_humidity(model_t *pmodel) {
+    assert(pmodel != NULL);
+    return pmodel->machine.actual_humidity;
 }
 
 
@@ -695,6 +849,13 @@ int model_display_temperature(model_t *pmodel) {
 }
 
 
+int model_display_humidity(model_t *pmodel) {
+    assert(pmodel != NULL);
+    return pmodel->configuration.parmac.abilita_visualizzazione_temperatura &&
+           pmodel->configuration.parmac.tipo_sonda_temperatura == SONDA_TEMPERATURA_SHT;
+}
+
+
 uint16_t model_get_pause_press_time(model_t *pmodel) {
     assert(pmodel != NULL);
     return pmodel->configuration.parmac.tempo_pressione_tasto_pausa;
@@ -704,6 +865,25 @@ uint16_t model_get_pause_press_time(model_t *pmodel) {
 uint16_t model_get_stop_press_time(model_t *pmodel) {
     assert(pmodel != NULL);
     return pmodel->configuration.parmac.tempo_pressione_tasto_stop;
+}
+
+
+int model_is_current_archive_in_drive(model_t *pmodel) {
+    assert(pmodel != NULL);
+    return name_intersection(pmodel->system.drive_machines, pmodel->system.num_drive_machines,
+                             &pmodel->configuration.parmac.nome, 1);
+}
+
+
+int model_menu_view_enabled(model_t *pmodel) {
+    assert(pmodel != NULL);
+    return model_is_program_running(pmodel) && pmodel->configuration.parmac.abilita_tasto_menu;
+}
+
+
+void model_update_statistics(model_t *pmodel, statistics_t stats) {
+    assert(pmodel != NULL);
+    pmodel->statistics = stats;
 }
 
 
@@ -730,4 +910,17 @@ static char *new_unique_filename(model_t *pmodel, name_t filename, unsigned long
     } while (found);
 
     return filename;
+}
+
+
+static int name_intersection(name_t *as, int numa, name_t *bs, int numb) {
+    for (int i = 0; i < numa; i++) {
+        for (int j = 0; j < numb; j++) {
+            if (strcmp(as[i], bs[j]) == 0) {
+                return 1;
+            }
+        }
+    }
+
+    return 0;
 }

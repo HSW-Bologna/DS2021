@@ -142,7 +142,11 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
             break;
 
         case VIEW_EVENT_CODE_IO_DONE:
-            view_common_toast(view_intl_get_string(pmodel, STRINGS_CONFIGURAZIONE_SALVATA));
+            if (event.error) {
+                view_common_io_error_toast(pmodel);
+            } else {
+                view_common_toast(view_intl_get_string(pmodel, STRINGS_CONFIGURAZIONE_SALVATA));
+            }
             break;
 
         case VIEW_EVENT_CODE_LVGL:

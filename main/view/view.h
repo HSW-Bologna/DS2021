@@ -23,6 +23,6 @@ void        view_register_keyboard_plus_minus_callback(lv_obj_t *kb, int id);
 
 
 extern const pman_page_t page_splash, page_test, page_main, page_settings, page_program, page_step, page_network,
-    page_log, page_tech_settings;
+    page_log, page_tech_settings, page_drive, page_stats;
 
 #endif

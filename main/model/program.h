@@ -14,6 +14,11 @@
 #define MAX_PROGRAM_SIZE    PROGRAM_SIZE(MAX_STEPS)
 #define STRING_NAME_SIZE    (MAX_NAME_SIZE + 1)
 
+#define MAX_STEP_DURATION (3600)
+#define MAX_TEMPERATURE   (100)
+#define MAX_HUMIDITY      (100)
+#define MAX_SPEED         (100)
+
 
 typedef enum {
     DRYER_PROGRAM_STEP_TYPE_DRYING = 0,

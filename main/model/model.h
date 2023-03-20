@@ -19,25 +19,32 @@
 #define FUNCTION_FLAGS_INITIALIZED 0x01
 #define FUNCTION_FLAGS_TEST        0x02
 
+#define SONDA_TEMPERATURA_PTC_1 0
+#define SONDA_TEMPERATURA_PTC_2 1
+#define SONDA_TEMPERATURA_SHT   2
+
+#define POSIZIONE_SONDA_INGRESSO 0
+#define POSIZIONE_SONDA_USCITA   1
 
 #define MAX_NUM_PARCICLO    16
-#define NUM_PARMAC          20
+#define NUM_PARMAC          29
 #define NUM_INTERNAL_RELES  9
 #define NUM_RELES           17
 #define NUM_INTERNAL_INPUTS 12
 #define NUM_INPUTS          24
 
-#define PARMAC_SIZE 44
+#define PARMAC_SIZE 93
 
 #define USER_ACCESS_LEVEL       1
 #define TECHNICIAN_ACCESS_LEVEL 3
 #define NUM_ACCESS_LEVELS       2
 
 
-#define MACHINE_STATE_STOPPED 0
-#define MACHINE_STATE_ACTIVE  1
-#define MACHINE_STATE_RUNNING 2
-#define MACHINE_STATE_PAUSED  3
+#define MACHINE_STATE_STOPPED    0
+#define MACHINE_STATE_ACTIVE     1
+#define MACHINE_STATE_WAIT_START 2
+#define MACHINE_STATE_RUNNING    3
+#define MACHINE_STATE_PAUSED     4
 
 
 #define TIPO_RISCALDAMENTO_GAS       0
@@ -69,20 +76,39 @@ typedef struct {
 
 typedef enum {
     ALARM_CODE_EMERGENZA = 0,
+    ALARM_CODE_TEMPERATURA,
+    ALARM_CODE_RISCALDAMENTO,
     ALARM_CODE_OBLO_APERTO,
 } alarm_code_t;
 
 
 typedef struct {
+    uint16_t complete_cycles;
+    uint16_t partial_cycles;
+    uint32_t active_time;
+    uint32_t work_time;
+    uint32_t rotation_time;
+    uint32_t ventilation_time;
+    uint32_t heating_time;
+} statistics_t;
+
+
+typedef struct {
+    name_t nome;
+
     uint16_t lingua;
     uint16_t abilita_visualizzazione_temperatura;
+    uint16_t abilita_tasto_menu;
     uint16_t tempo_pressione_tasto_pausa;
     uint16_t tempo_pressione_tasto_stop;
     uint16_t tempo_stop_automatico;
+    uint16_t stop_tempo_ciclo;
+    uint16_t tempo_attesa_partenza_ciclo;
 
     uint16_t abilita_espansione_rs485;
     uint16_t abilita_gas;
     uint16_t velocita_minima;
+    uint16_t velocita_massima;
     uint16_t tempo_gettone;
     uint16_t velocita_antipiega;
     uint16_t tipo_pagamento;
@@ -91,6 +117,9 @@ typedef struct {
 
     /* Parametri da inviare alla macchina */
     uint16_t tipo_sonda_temperatura;
+    uint16_t posizione_sonda_temperatura;
+    uint16_t temperatura_massima_ingresso;
+    uint16_t temperatura_massima_uscita;
     uint16_t temperatura_sicurezza_in;
     uint16_t temperatura_sicurezza_out;
     uint16_t tempo_allarme_temperatura;     // se non arriva in temperatura in quel tempo
@@ -100,6 +129,7 @@ typedef struct {
     uint16_t inverti_macchina_occupata;
     uint16_t tipo_riscaldamento;
     uint16_t autoavvio;
+    uint16_t abilita_allarmi;
 
     /*
 abilita_visualizzazione_cicli_totali
@@ -160,7 +190,8 @@ typedef struct {
         uint16_t adc_ptc2;
         int      temperature_ptc1;
         int      temperature_ptc2;
-        int      configured_temperature;
+        int      actual_temperature;
+        int      actual_humidity;
 
         char version[32];
         char date[32];
@@ -180,9 +211,13 @@ typedef struct {
         char            eth_ipaddr[16];
         char            ssid[33];
         wifi_status_t   net_status;
-        int             num_networks;
+        size_t          num_networks;
         wifi_network_t *networks;
         int             connected;
+
+        size_t  num_drive_machines;
+        name_t *drive_machines;
+        int     drive_mounted;
     } system;
 
     struct {
@@ -191,6 +226,8 @@ typedef struct {
         size_t          step_number;
         unsigned long   autostop_ts;
     } run;
+
+    statistics_t statistics;
 
     parameter_handle_t parameter_mac[NUM_PARMAC];
     size_t             num_parciclo;
@@ -201,6 +238,7 @@ typedef struct {
 void             model_init(model_t *pmodel);
 void             model_set_machine_communication_error(model_t *pmodel, int error);
 int              model_is_machine_communication_ok(model_t *pmodel);
+int              model_is_machine_communication_active(model_t *pmodel);
 size_t           model_get_language(model_t *pmodel);
 unsigned int     model_get_access_level(model_t *pmodel);
 const char      *model_parameter_get_description(model_t *pmodel, parameter_handle_t *par);
@@ -229,6 +267,9 @@ const char      *model_format_parameter_value(model_t *pmodel, parameter_handle_
                                               size_t len, size_t num);
 uint16_t         model_get_remaining(model_t *pmodel);
 void             model_set_remaining(model_t *pmodel, uint16_t remaining);
+uint16_t        *model_get_current_setpoint_parameter(model_t *pmodel);
+uint16_t        *model_get_current_speed_parameter(model_t *pmodel);
+uint16_t        *model_get_current_humidity_parameter(model_t *pmodel);
 void             model_start_program(model_t *pmodel, size_t num);
 dryer_program_t *model_get_current_program(model_t *pmodel);
 parameters_step_t *model_get_current_step(model_t *pmodel);
@@ -245,8 +286,9 @@ uint16_t           model_get_alarms(model_t *pmodel);
 void               model_stop_program(model_t *pmodel);
 int                model_is_in_test(model_t *pmodel);
 int         model_update_sensors(model_t *pmodel, uint16_t *coins, uint16_t payment, uint16_t t1_adc, uint16_t t2_adc,
-                                 uint16_t t1, uint16_t t2, uint16_t configured_temperature);
-int         model_current_setpoint(model_t *pmodel);
+                                 uint16_t t1, uint16_t t2, uint16_t actual_temperature, uint16_t actual_humidity);
+int         model_current_temperature_setpoint(model_t *pmodel);
+int         model_current_humidity_setpoint(model_t *pmodel);
 int         model_is_machine_initialized(model_t *pmodel);
 size_t      model_get_current_program_number(model_t *pmodel);
 size_t      model_get_current_step_number(model_t *pmodel);
@@ -256,6 +298,7 @@ int         model_wifi_status_changed(model_t *pmodel, wifi_status_t status);
 const char *model_get_password(model_t *pmodel);
 void        model_set_password(model_t *pmodel, const char *password);
 int         model_current_temperature(model_t *pmodel);
+int         model_current_humidity(model_t *pmodel);
 const char *model_get_program_name_in_language(model_t *pmodel, uint16_t language, size_t num);
 uint16_t    model_get_access_level_code(model_t *pmodel);
 void        model_set_access_level_code(model_t *pmodel, uint16_t access_level);
@@ -267,6 +310,14 @@ uint16_t    model_get_stop_press_time(model_t *pmodel);
 int         model_should_autostop(model_t *pmodel);
 int         model_is_porthole_open(model_t *pmodel);
 int         model_update_flags(model_t *pmodel, uint16_t alarms, uint16_t flags);
-
+int         model_update_drive_status(model_t *pmodel, int mounted);
+int         model_is_drive_mounted(model_t *pmodel);
+int         model_is_current_archive_in_drive(model_t *pmodel);
+int         model_menu_view_enabled(model_t *pmodel);
+int         model_display_humidity(model_t *pmodel);
+uint16_t   *model_get_maximum_speed(model_t *pmodel);
+uint16_t   *model_get_minimum_speed(model_t *pmodel);
+void        model_update_statistics(model_t *pmodel, statistics_t stats);
+int         model_is_machine_communication_enabled(model_t *pmodel);
 
 #endif

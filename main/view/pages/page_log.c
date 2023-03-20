@@ -34,7 +34,7 @@ static void open_page(model_t *pmodel, void *arg) {
     lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(label, LV_PCT(95));
 
-    if (data->logdata) {
+    if (data->logdata != NULL) {
         lv_label_set_text(label, data->logdata);
     }
 

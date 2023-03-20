@@ -18,11 +18,13 @@ static void load_parmac_callback(model_t *pmodel, void *data, void *arg);
 static void load_parmac_error_callback(model_t *pmodel, void *arg);
 static void disk_io_callback(model_t *pmodel, void *data, void *arg);
 static void disk_io_error_callback(model_t *pmodel, void *arg);
+static void disk_io_callback_reload(model_t *pmodel, void *data, void *arg);
 static void load_programs_callback(model_t *pmodel, void *data, void *arg);
 static void load_password_callback(model_t *pmodel, void *data, void *arg);
+static void disk_io_refresh_machines_callback(model_t *pmodel, void *data, void *arg);
 
 
-static int pending_start = 0;
+static int pending_change = 0;
 
 
 void controller_init(model_t *pmodel) {
@@ -58,6 +60,35 @@ void controller_process_msg(view_controller_message_t *msg, model_t *pmodel) {
         case VIEW_CONTROLLER_MESSAGE_CODE_NOTHING:
             break;
 
+        case VIEW_CONTROLLER_MESSAGE_CODE_READ_STATISTICS:
+            machine_read_statistics();
+            break;
+
+        case VIEW_CONTROLLER_MESSAGE_CODE_CHANGE_REMAINING_TIME:
+            machine_change_remaining_time(msg->register_value);
+            break;
+
+        case VIEW_CONTROLLER_MESSAGE_CODE_CHANGE_HUMIDITY:
+            machine_change_humidity(msg->register_value);
+            break;
+
+        case VIEW_CONTROLLER_MESSAGE_CODE_CHANGE_TEMPERATURE:
+            machine_change_temperature(msg->register_value);
+            break;
+
+        case VIEW_CONTROLLER_MESSAGE_CODE_CHANGE_SPEED:
+            machine_change_speed(msg->register_value);
+            break;
+
+        case VIEW_CONTROLLER_MESSAGE_CODE_EXPORT_CURRENT_MACHINE:
+            disk_op_export_current_machine(pmodel->configuration.parmac.nome, disk_io_refresh_machines_callback,
+                                           disk_io_error_callback, NULL);
+            break;
+
+        case VIEW_CONTROLLER_MESSAGE_CODE_IMPORT_CURRENT_MACHINE:
+            disk_op_import_current_machine(msg->name, disk_io_callback_reload, disk_io_error_callback, NULL);
+            break;
+
         case VIEW_CONTROLLER_MESSAGE_CODE_READ_LOG_FILE:
             disk_op_read_file(LOGFILE, disk_io_callback, disk_io_error_callback, NULL);
             break;
@@ -71,13 +102,14 @@ void controller_process_msg(view_controller_message_t *msg, model_t *pmodel) {
                 model_start_program(pmodel, msg->program);
                 machine_send_step(model_get_current_step(pmodel), model_get_current_program_number(pmodel),
                                   model_get_current_step_number(pmodel), 1);
-                pending_start = 1;
+                pending_change = 1;
             } else {
                 machine_send_command(COMMAND_REGISTER_RUN_STEP);
             }
             break;
 
         case VIEW_CONTROLLER_MESSAGE_CODE_STOP_MACHINE:
+            pending_change = 1;
             model_stop_program(pmodel);
             machine_send_command(COMMAND_REGISTER_STOP);
             break;
@@ -106,9 +138,15 @@ void controller_process_msg(view_controller_message_t *msg, model_t *pmodel) {
             machine_test_pwm(msg->pwm, msg->speed);
             break;
 
-        case VIEW_CONTROLLER_MESSAGE_CODE_RESTART_COMMUNICATION:
-            model_set_machine_communication_error(pmodel, 0);
-            machine_restart_communication();
+        case VIEW_CONTROLLER_MESSAGE_CODE_TOGGLE_COMMUNICATION:
+            if (model_is_machine_communication_active(pmodel)) {
+                model_set_machine_communication(pmodel, 0);
+                machine_stop_communication();
+            } else {
+                model_set_machine_communication_error(pmodel, 0);
+                model_set_machine_communication(pmodel, 1);
+                machine_restart_communication();
+            }
             view_event((view_event_t){.code = VIEW_EVENT_CODE_ALARM});
             break;
 
@@ -167,6 +205,12 @@ void controller_manage(model_t *pmodel) {
             machine_refresh_test_values();
         }
         machine_refresh_state();
+
+        if (model_update_drive_status(pmodel, disk_op_is_drive_mounted())) {
+            pmodel->system.num_drive_machines = disk_op_drive_machines(&pmodel->system.drive_machines);
+            view_event((view_event_t){.code = VIEW_EVENT_CODE_DRIVE});
+        }
+
         fastts = get_millis();
     } else if (is_expired(slowts, get_millis(), 600UL)) {
         machine_refresh_sensors();
@@ -191,19 +235,6 @@ void controller_manage(model_t *pmodel) {
     }
 
 
-    if (model_is_machine_communication_ok(pmodel) && model_is_program_running(pmodel)) {
-        if (model_is_machine_active(pmodel) && !pending_start) {
-            if (model_next_step(pmodel)) {
-                pending_start = 1;
-                machine_send_step(model_get_current_step(pmodel), model_get_current_program_number(pmodel),
-                                  model_get_current_step_number(pmodel), 1);
-            } else {
-                model_stop_program(pmodel);
-                machine_send_command(COMMAND_REGISTER_STOP);
-            }
-        }
-    }
-
     machine_response_message_t msg;
     while (machine_get_response(&msg)) {
         switch (msg.code) {
@@ -212,13 +243,18 @@ void controller_manage(model_t *pmodel) {
                 view_event((view_event_t){.code = VIEW_EVENT_CODE_ALARM});
                 break;
 
+            case MACHINE_RESPONSE_MESSAGE_CODE_READ_STATISTICS:
+                model_update_statistics(pmodel, msg.stats);
+                view_event((view_event_t){.code = VIEW_EVENT_CODE_STATS_READ});
+                break;
+
             case MACHINE_RESPONSE_MESSAGE_CODE_TEST_READ_INPUT:
                 view_event((view_event_t){.code = VIEW_EVENT_CODE_TEST_INPUT_VALUES, .digital_inputs = msg.value});
                 break;
 
             case MACHINE_RESPONSE_MESSAGE_CODE_READ_SENSORS:
                 if (model_update_sensors(pmodel, msg.coins, msg.payment, msg.t1_adc, msg.t2_adc, msg.t1, msg.t2,
-                                         msg.configured_temperature)) {
+                                         msg.actual_temperature, msg.h_rs485)) {
                     view_event((view_event_t){.code = VIEW_EVENT_CODE_SENSORS_CHANGED});
                 }
                 break;
@@ -231,6 +267,7 @@ void controller_manage(model_t *pmodel) {
                 if (model_pick_up_machine_state(pmodel, msg.state, msg.program_number, msg.step_number)) {
                     machine_send_step(model_get_current_step(pmodel), model_get_current_program_number(pmodel),
                                       model_get_current_step_number(pmodel), pmodel->configuration.parmac.autoavvio);
+                    view_event((view_event_t){.code = VIEW_EVENT_CODE_STATE_SYNCED});
                     view_event((view_event_t){.code = VIEW_EVENT_CODE_STATE_CHANGED});
                 }
                 first_sync = 0;
@@ -245,11 +282,19 @@ void controller_manage(model_t *pmodel) {
                     break;
                 }
 
+                int old_state = model_get_machine_state(pmodel);
                 if (model_update_machine_state(pmodel, msg.state, msg.step_type)) {
-                    if (pending_start && model_is_machine_running(pmodel)) {
-                        pending_start = 0;
+                    if (model_is_machine_active(pmodel) && !pending_change) {
+                        if (model_next_step(pmodel)) {
+                            machine_send_step(model_get_current_step(pmodel), model_get_current_program_number(pmodel),
+                                              model_get_current_step_number(pmodel), old_state != MACHINE_STATE_PAUSED);
+                        } else {
+                            model_stop_program(pmodel);
+                            machine_send_command(COMMAND_REGISTER_DONE);
+                        }
                     }
 
+                    pending_change = 0;
                     view_event((view_event_t){.code = VIEW_EVENT_CODE_STATE_CHANGED});
                 }
 
@@ -265,7 +310,8 @@ void controller_manage(model_t *pmodel) {
         }
     }
 
-    if (model_should_autostop(pmodel)) {
+    if (model_should_autostop(pmodel) && !pending_change) {
+        pending_change = 1;
         model_stop_program(pmodel);
         machine_send_command(COMMAND_REGISTER_STOP);
     }
@@ -311,9 +357,35 @@ static void load_password_callback(model_t *pmodel, void *data, void *arg) {
     }
 }
 
+
 static void disk_io_callback(model_t *pmodel, void *data, void *arg) {
     (void)pmodel;
+    view_event_t event = {.code = VIEW_EVENT_CODE_IO_DONE, .io_data = data, .io_op = (int)(uintptr_t)arg};
+    view_event(event);
+}
+
+
+static void disk_io_refresh_machines_callback(model_t *pmodel, void *data, void *arg) {
+    pmodel->system.num_drive_machines = disk_op_drive_machines(&pmodel->system.drive_machines);
+    view_event((view_event_t){.code = VIEW_EVENT_CODE_DRIVE});
     view_event((view_event_t){.code = VIEW_EVENT_CODE_IO_DONE, .io_data = data, .io_op = (int)(uintptr_t)arg});
+}
+
+
+static void second_reload_callback(model_t *pmodel, void *data, void *arg) {
+    load_programs_callback(pmodel, data, arg);
+    view_event((view_event_t){.code = VIEW_EVENT_CODE_IO_DONE, .io_data = data, .io_op = (int)(uintptr_t)arg});
+}
+
+
+static void first_reload_callback(model_t *pmodel, void *data, void *arg) {
+    load_parmac_callback(pmodel, data, arg);
+    disk_op_load_programs(second_reload_callback, disk_io_error_callback, NULL);
+}
+
+
+static void disk_io_callback_reload(model_t *pmodel, void *data, void *arg) {
+    disk_op_load_parmac(first_reload_callback, disk_io_error_callback, NULL);
 }
 
 

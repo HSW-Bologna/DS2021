@@ -13,6 +13,7 @@
 #include "machine.h"
 #include "serial.h"
 #include "utils/system_time.h"
+#include "utils/socketq.h"
 #include "gel/timer/timecheck.h"
 #include "gel/serializer/serializer.h"
 #include "modbus.h"
@@ -36,6 +37,7 @@
 
 #define MACHINE_HOLDING_REGISTER_PWM(x)       (MACHINE_HOLDING_REGISTER_PWM1 + x)
 #define MACHINE_HOLDING_REGISTER_PARMAC_START MACHINE_HOLDING_REGISTER_TIPO_SONDA_TEMPERATURA
+#define MACHINE_HOLDING_REGISTER_STATS_START  MACHINE_HOLDING_REGISTER_CICLI_TOTALI
 
 
 #define CHECK_MSG_WRITE(x, msg_type)                                                                                   \
@@ -60,11 +62,10 @@ enum {
     MACHINE_HOLDING_REGISTER_TIPO_SONDA_TEMPERATURA = 10,
     MACHINE_HOLDING_REGISTER_TEMPERATURA_SICUREZZA,
     MACHINE_HOLDING_REGISTER_TEMPO_ALLARME_TEMPERATURA,
-    MACHINE_HOLDING_REGISTER_ABILITA_ALLARME_INVERTER,
-    MACHINE_HOLDING_REGISTER_ABILITA_ALLARME_FILTRO,
     MACHINE_HOLDING_REGISTER_TIPO_MACCHINA_OCCUPATA,
-    MACHINE_HOLDING_REGISTER_INVERTI_MACCHINA_OCCUPATA,
     MACHINE_HOLDING_REGISTER_TIPO_RISCALDAMENTO,
+    MACHINE_HOLDING_REGISTER_TEMPO_ATTESA_PARTENZA_CICLO,
+    MACHINE_HOLDING_REGISTER_FLAG_CONFIGURAZIONE,
 
     MACHINE_HOLDING_REGISTER_NUMERO_PROGRAMMA = 50,
     MACHINE_HOLDING_REGISTER_NUMERO_STEP,
@@ -75,15 +76,28 @@ enum {
     MACHINE_HOLDING_REGISTER_VELOCITA,
     MACHINE_HOLDING_REGISTER_TEMPERATURA,
     MACHINE_HOLDING_REGISTER_UMIDITA,
-    MACHINE_HOLDING_REGISTER_FLAG_CONFIGURAZIONE,
+    MACHINE_HOLDING_REGISTER_FLAG_CONFIGURAZIONE_STEP,
     MACHINE_HOLDING_REGISTER_NUMERO_CICLI,
     MACHINE_HOLDING_REGISTER_TEMPO_RITARDO,
 
-    /* Read only */
     MACHINE_HOLDING_REGISTER_STATE = 100,
     MACHINE_HOLDING_REGISTER_ALARMS,
     MACHINE_HOLDING_REGISTER_FLAG_FUNZIONAMENTO,
     MACHINE_HOLDING_REGISTER_TEMPO_RIMANENTE,
+
+    /* Statistics */
+    MACHINE_HOLDING_REGISTER_CICLI_TOTALI = 150,
+    MACHINE_HOLDING_REGISTER_CICLI_PARZIALI,
+    MACHINE_HOLDING_REGISTER_TEMPO_ATTIVITA_HI,
+    MACHINE_HOLDING_REGISTER_TEMPO_ATTIVITA_LO,
+    MACHINE_HOLDING_REGISTER_TEMPO_LAVORO_HI,
+    MACHINE_HOLDING_REGISTER_TEMPO_LAVORO_LO,
+    MACHINE_HOLDING_REGISTER_TEMPO_MOTO_HI,
+    MACHINE_HOLDING_REGISTER_TEMPO_MOTO_LO,
+    MACHINE_HOLDING_REGISTER_TEMPO_VENTILAZIONE_HI,
+    MACHINE_HOLDING_REGISTER_TEMPO_VENTILAZIONE_LO,
+    MACHINE_HOLDING_REGISTER_TEMPO_RISCALDAMENTO_HI,
+    MACHINE_HOLDING_REGISTER_TEMPO_RISCALDAMENTO_LO,
 };
 
 
@@ -100,7 +114,7 @@ enum {
     MACHINE_INPUT_REGISTER_ADC_PTC2,
     MACHINE_INPUT_REGISTER_TEMPERATURE_PTC1,
     MACHINE_INPUT_REGISTER_TEMPERATURE_PTC2,
-    MACHINE_INPUT_REGISTER_CONFIGURED_TEMPERATURE,
+    MACHINE_INPUT_REGISTER_actual_temperature,
 };
 
 
@@ -115,13 +129,20 @@ typedef enum {
     MACHINE_MESSAGE_CODE_SEND_PARMAC,
     MACHINE_MESSAGE_CODE_COMMAND,
     MACHINE_MESSAGE_CODE_RESTART,
+    MACHINE_MESSAGE_CODE_STOP,
     MACHINE_MESSAGE_CODE_SEND_STEP,
+    MACHINE_MESSAGE_CODE_WRITE_HOLDING_REGISTER,
+    MACHINE_MESSAGE_CODE_READ_STATISTICS,
 } machine_message_code_t;
 
 
 typedef struct {
     machine_message_code_t code;
     union {
+        struct {
+            uint16_t register_index;
+            uint16_t register_value;
+        };
         struct {
             parameters_step_t step;
             size_t            prog_num;
@@ -139,13 +160,16 @@ typedef struct {
         uint16_t command;
 
         struct {
+            uint16_t stop_time_in_pause;
             uint16_t temperature_probe_type;
             uint16_t safety_temperature;
             uint16_t temperature_alarm_delay;
+            uint16_t disable_alarms;
             uint16_t enable_inverter_alarm;
             uint16_t enable_filter_alarm;
             uint16_t busy_signal_type;
             uint16_t invert_busy_signal;
+            uint16_t start_delay;
             uint16_t heating_type;
         };
     };
@@ -168,22 +192,20 @@ static int   read_input_registers(int fd, ModbusMaster *master, uint8_t address,
 static int   read_holding_registers(int fd, ModbusMaster *master, uint8_t address, uint16_t index, size_t len);
 static int   write_holding_registers(int fd, ModbusMaster *master, uint8_t address, uint16_t index, uint16_t *values,
                                      size_t len);
+static void  send_write_holding_register(uint16_t index, uint16_t value);
 static void  send_message(machine_message_t *message);
 static int   send_request(int fd, ModbusMaster *master, size_t expected_len);
-static int   task_manage_message(machine_message_t message, ModbusMaster *master, int fd);
+static int   task_manage_message(machine_message_t message, ModbusMaster *master, int fd, int *stop);
 static void  report_error(void);
 static void  send_response(machine_response_message_t *message);
 
 
-static int request_server_fd;
-static int response_server_fd;
-static int request_client_fd;
-static int response_client_fd;
-
+static socketq_t requestq  = {0};
+static socketq_t responseq = {0};
 
 void machine_init(void) {
-    int res1 = init_unix_server_socket(REQUEST_SOCKET_PATH, &request_server_fd, &request_client_fd);
-    int res2 = init_unix_server_socket(RESPONSE_SOCKET_PATH, &response_server_fd, &response_client_fd);
+    int res1 = socketq_init(&requestq, REQUEST_SOCKET_PATH, sizeof(machine_message_t));
+    int res2 = socketq_init(&responseq, RESPONSE_SOCKET_PATH, sizeof(machine_response_message_t));
     assert(res1 == 0 && res2 == 0);
 
     pthread_t id;
@@ -193,16 +215,7 @@ void machine_init(void) {
 
 
 int machine_get_response(machine_response_message_t *msg) {
-    struct sockaddr_un peer_socket;
-    socklen_t          peer_socket_len = sizeof(peer_socket);
-
-    struct pollfd fds[1] = {{.fd = response_server_fd, .events = POLLIN}};
-    if (poll(fds, 1, 0)) {
-        return recvfrom(response_server_fd, msg, sizeof(*msg), 0, (struct sockaddr *)&peer_socket, &peer_socket_len) ==
-               sizeof(*msg);
-    } else {
-        return 0;
-    }
+    return socketq_receive_nonblock(&responseq, (uint8_t *)msg, 0);
 }
 
 
@@ -255,16 +268,27 @@ void machine_read_version(void) {
 }
 
 
+void machine_read_statistics(void) {
+    machine_message_t message = {.code = MACHINE_MESSAGE_CODE_READ_STATISTICS};
+    send_message(&message);
+}
+
+
 void machine_send_parmac(parmac_t *parmac) {
     machine_message_t message = {
         .code                    = MACHINE_MESSAGE_CODE_SEND_PARMAC,
         .temperature_probe_type  = parmac->tipo_sonda_temperatura,
-        .safety_temperature      = 0,     // TODO:
+        .safety_temperature      = parmac->posizione_sonda_temperatura == POSIZIONE_SONDA_INGRESSO
+                                       ? parmac->temperatura_massima_ingresso
+                                       : parmac->temperatura_massima_uscita,
         .temperature_alarm_delay = parmac->tempo_allarme_temperatura,
+        .stop_time_in_pause      = parmac->stop_tempo_ciclo,
+        .disable_alarms          = !parmac->abilita_allarmi,
         .enable_inverter_alarm   = parmac->allarme_inverter_off_on,
         .enable_filter_alarm     = parmac->allarme_filtro_off_on,
         .busy_signal_type        = parmac->tipo_macchina_occupata,
         .invert_busy_signal      = parmac->inverti_macchina_occupata,
+        .start_delay             = parmac->tempo_attesa_partenza_ciclo,
         .heating_type            = parmac->tipo_riscaldamento,
     };
     send_message(&message);
@@ -301,12 +325,47 @@ void machine_restart_communication(void) {
 }
 
 
+void machine_stop_communication(void) {
+    machine_message_t message = {.code = MACHINE_MESSAGE_CODE_STOP};
+    send_message(&message);
+}
+
+
+void machine_change_remaining_time(uint16_t seconds) {
+    send_write_holding_register(MACHINE_HOLDING_REGISTER_TEMPO_RIMANENTE, seconds);
+}
+
+
+void machine_change_humidity(uint16_t humidity) {
+    send_write_holding_register(MACHINE_HOLDING_REGISTER_UMIDITA, humidity);
+}
+
+
+void machine_change_temperature(uint16_t temperature) {
+    send_write_holding_register(MACHINE_HOLDING_REGISTER_TEMPERATURA, temperature);
+}
+
+
+void machine_change_speed(uint16_t speed) {
+    send_write_holding_register(MACHINE_HOLDING_REGISTER_VELOCITA, speed);
+}
+
+
+static void send_write_holding_register(uint16_t index, uint16_t value) {
+    machine_message_t message = {
+        .code           = MACHINE_MESSAGE_CODE_WRITE_HOLDING_REGISTER,
+        .register_index = index,
+        .register_value = value,
+    };
+    send_message(&message);
+}
+
+
 static void send_message(machine_message_t *message) {
     struct sockaddr_un remote;
     remote.sun_family = AF_UNIX;
     strcpy(remote.sun_path, REQUEST_SOCKET_PATH);
-    CHECK_MSG_WRITE(sendto(request_client_fd, message, sizeof(*message), 0, (struct sockaddr *)&remote, sizeof(remote)),
-                    machine_message_t);
+    socketq_send(&requestq, (uint8_t *)message);
 }
 
 
@@ -362,13 +421,72 @@ static void read_sensors_cb(machine_response_message_t *response, uint16_t index
         &response->t2_adc,
         &response->t1,
         &response->t2,
-        &response->configured_temperature,
+        &response->actual_temperature,
     };
 
     int i = (int)index - MACHINE_INPUT_REGISTER_GETT1;
     if (i >= 0 && i < (int)(sizeof(sensors_ptrs) / sizeof(sensors_ptrs[0]))) {
         *sensors_ptrs[i] = value;
     }
+}
+
+
+static void read_statistics_cb(machine_response_message_t *response, uint16_t index, uint16_t value) {
+#define OVERWRITE_HI(x, hi) x = ((x)&0x0000FFFF) | ((uint32_t)value << 16)
+#define OVERWRITE_LO(x, hi) x = ((x)&0xFFFF0000) | ((uint32_t)value)
+
+    switch (index) {
+        case MACHINE_HOLDING_REGISTER_CICLI_TOTALI:
+            response->stats.complete_cycles = value;
+            break;
+
+        case MACHINE_HOLDING_REGISTER_CICLI_PARZIALI:
+            response->stats.partial_cycles = value;
+            break;
+
+        case MACHINE_HOLDING_REGISTER_TEMPO_ATTIVITA_HI:
+            OVERWRITE_HI(response->stats.active_time, value);
+            break;
+
+        case MACHINE_HOLDING_REGISTER_TEMPO_ATTIVITA_LO:
+            OVERWRITE_LO(response->stats.active_time, value);
+            break;
+
+        case MACHINE_HOLDING_REGISTER_TEMPO_LAVORO_HI:
+            OVERWRITE_HI(response->stats.work_time, value);
+            break;
+
+        case MACHINE_HOLDING_REGISTER_TEMPO_LAVORO_LO:
+            OVERWRITE_LO(response->stats.work_time, value);
+            break;
+
+        case MACHINE_HOLDING_REGISTER_TEMPO_MOTO_HI:
+            OVERWRITE_HI(response->stats.rotation_time, value);
+            break;
+
+        case MACHINE_HOLDING_REGISTER_TEMPO_MOTO_LO:
+            OVERWRITE_LO(response->stats.rotation_time, value);
+            break;
+
+        case MACHINE_HOLDING_REGISTER_TEMPO_VENTILAZIONE_HI:
+            OVERWRITE_HI(response->stats.ventilation_time, value);
+            break;
+
+        case MACHINE_HOLDING_REGISTER_TEMPO_VENTILAZIONE_LO:
+            OVERWRITE_LO(response->stats.ventilation_time, value);
+            break;
+
+        case MACHINE_HOLDING_REGISTER_TEMPO_RISCALDAMENTO_HI:
+            OVERWRITE_HI(response->stats.heating_time, value);
+            break;
+
+        case MACHINE_HOLDING_REGISTER_TEMPO_RISCALDAMENTO_LO:
+            OVERWRITE_LO(response->stats.heating_time, value);
+            break;
+    }
+
+#undef OVERWRITE_HI
+#undef OVERWRITE_LO
 }
 
 
@@ -428,7 +546,7 @@ static ModbusError masterExceptionCallback(const ModbusMaster *master, uint8_t a
 
 
 static void *serial_port_task(void *args) {
-    int communication_error = 0;
+    int communication_error = 0, communication_stop = 0;
 
     int fd = look_for_hardware_port();
     if (fd < 0) {
@@ -452,15 +570,12 @@ static void *serial_port_task(void *args) {
     machine_message_t not_delivered = {0};
 
     for (;;) {
-        struct sockaddr_un peer_socket;
-        socklen_t          peer_socket_len = sizeof(peer_socket);
-        machine_message_t  message         = {0};
+        machine_message_t message = {0};
 
-        if (recvfrom(request_server_fd, &message, sizeof(message), 0, (struct sockaddr *)&peer_socket,
-                     &peer_socket_len) == sizeof(message)) {
-
+        if (socketq_receive(&requestq, (uint8_t *)&message)) {
             /* received a new message */
-            if (communication_error && message.code == MACHINE_MESSAGE_CODE_RESTART) {
+            if ((communication_error || communication_stop) && message.code == MACHINE_MESSAGE_CODE_RESTART) {
+                communication_stop = 0;
                 if (fd >= 0) {
                     close(fd);
                 }
@@ -474,13 +589,13 @@ static void *serial_port_task(void *args) {
                 } else {
                     setup_port(fd);
 
-                    if ((communication_error = task_manage_message(not_delivered, &master, fd))) {
+                    if ((communication_error = task_manage_message(not_delivered, &master, fd, &communication_stop))) {
                         report_error();
                         continue;
                     }
                 }
-            } else if (!communication_error) {
-                if ((communication_error = task_manage_message(message, &master, fd))) {
+            } else if (!(communication_error || communication_stop)) {
+                if ((communication_error = task_manage_message(message, &master, fd, &communication_stop))) {
                     not_delivered = message;
                     report_error();
                 }
@@ -500,9 +615,7 @@ static void send_response(machine_response_message_t *message) {
     struct sockaddr_un remote;
     remote.sun_family = AF_UNIX;
     strcpy(remote.sun_path, RESPONSE_SOCKET_PATH);
-    CHECK_MSG_WRITE(
-        sendto(response_client_fd, message, sizeof(*message), 0, (struct sockaddr *)&remote, sizeof(remote)),
-        machine_response_message_t);
+    socketq_send(&responseq, (uint8_t *)message);
 }
 
 
@@ -513,11 +626,32 @@ static void report_error(void) {
 }
 
 
-static int task_manage_message(machine_message_t message, ModbusMaster *master, int fd) {
+static int task_manage_message(machine_message_t message, ModbusMaster *master, int fd, int *stop) {
     int res = 0;
     modbusMasterSetUserPointer(master, NULL);
 
     switch (message.code) {
+        case MACHINE_MESSAGE_CODE_STOP:
+            *stop = 1;
+            break;
+
+        case MACHINE_MESSAGE_CODE_READ_STATISTICS: {
+            machine_response_message_t response = {.code = MACHINE_RESPONSE_MESSAGE_CODE_READ_STATISTICS};
+            modbus_context_t           context  = {.response = &response, .callback = read_statistics_cb};
+            modbusMasterSetUserPointer(master, (void *)&context);
+            res = read_holding_registers(fd, master, MODBUS_MACHINE_ADDRESS, MACHINE_HOLDING_REGISTER_STATS_START, 10);
+            if (res) {
+                break;
+            }
+            send_response(&response);
+            break;
+        }
+
+        case MACHINE_MESSAGE_CODE_WRITE_HOLDING_REGISTER:
+            res = write_holding_registers(fd, master, MODBUS_MACHINE_ADDRESS, message.register_index,
+                                          &message.register_value, 1);
+            break;
+
         case MACHINE_MESSAGE_CODE_GET_SENSORS_VALUES: {
             machine_response_message_t response = {.code = MACHINE_RESPONSE_MESSAGE_CODE_READ_SENSORS};
             modbus_context_t           context  = {.response = &response, .callback = read_sensors_cb};
@@ -563,10 +697,17 @@ static int task_manage_message(machine_message_t message, ModbusMaster *master, 
         }
 
         case MACHINE_MESSAGE_CODE_SEND_PARMAC: {
+            uint16_t flags = (message.stop_time_in_pause > 0) | ((message.invert_busy_signal > 0) << 1) |
+                             ((message.disable_alarms > 0) << 2) | ((message.enable_inverter_alarm > 0) << 3) |
+                             ((message.enable_filter_alarm > 0) << 4);
             uint16_t buffer[] = {
-                message.temperature_probe_type, message.safety_temperature,  message.temperature_alarm_delay,
-                message.enable_inverter_alarm,  message.enable_filter_alarm, message.busy_signal_type,
-                message.invert_busy_signal,     message.heating_type,
+                message.temperature_probe_type,
+                message.safety_temperature,
+                message.temperature_alarm_delay,
+                message.busy_signal_type,
+                message.heating_type,
+                message.start_delay,
+                flags,
             };
             res = write_holding_registers(fd, master, MODBUS_MACHINE_ADDRESS, MACHINE_HOLDING_REGISTER_PARMAC_START,
                                           buffer, sizeof(buffer) / sizeof(buffer[0]));
@@ -704,11 +845,15 @@ static int task_manage_message(machine_message_t message, ModbusMaster *master, 
             if (res) {
                 break;
             }
+
+            uint16_t command = COMMAND_REGISTER_RUN_STEP;
             if (message.start) {
-                uint16_t command = COMMAND_REGISTER_RUN_STEP;
-                res = write_holding_registers(fd, master, MODBUS_MACHINE_ADDRESS, MACHINE_HOLDING_REGISTER_COMMAND,
-                                              &command, 1);
+                command = COMMAND_REGISTER_RUN_STEP;
+            } else {
+                command = COMMAND_REGISTER_PAUSE;
             }
+            res = write_holding_registers(fd, master, MODBUS_MACHINE_ADDRESS, MACHINE_HOLDING_REGISTER_COMMAND,
+                                          &command, 1);
             break;
         }
 

@@ -238,6 +238,10 @@ static void event_callback(lv_event_t *event) {
         pman_event.value = lv_obj_has_state(obj, LV_STATE_CHECKED);
     } else if (lv_obj_check_type(obj, &lv_dropdown_class)) {
         pman_event.value = lv_dropdown_get_selected(obj);
+        lv_obj_t *list   = lv_dropdown_get_list(obj);
+        if (list != NULL) {
+            lv_obj_set_width(list, lv_obj_get_width(obj));
+        }
     } else if (lv_obj_check_type(obj, &lv_switch_class)) {
         pman_event.value = lv_obj_has_state(obj, LV_STATE_CHECKED);
     } else if (lv_obj_check_type(obj, &lv_roller_class)) {

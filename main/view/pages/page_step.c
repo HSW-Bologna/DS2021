@@ -44,6 +44,8 @@ static void update_param_list(struct page_data *data, model_t *pmodel) {
 
     for (size_t i = 0; i < maxp; i++) {
         lv_obj_t *btn = lv_list_add_btn(data->list, NULL, NULL);
+        lv_obj_set_style_bg_color(btn, lv_theme_get_color_secondary(btn), LV_STATE_CHECKED);
+        lv_obj_add_flag(btn, LV_OBJ_FLAG_CHECKABLE);
         view_register_object_default_callback_with_number(btn, PARAMETER_BTN_ID, i);
 
         lv_obj_t *l1 = lv_label_create(btn);
@@ -127,6 +129,7 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                         if (data->editor != NULL) {
                             lv_obj_del(data->editor);
                         }
+                        view_common_select_btn_in_list(data->list, event.data.number);
                         parameter_clone(&data->par, parciclo_get_handle(pmodel, event.data.number),
                                         (void *)&data->par_buffer);
                         data->num = event.data.number;

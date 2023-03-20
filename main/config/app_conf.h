@@ -24,16 +24,22 @@
 #define CONFIG_LOG_LEVEL  LOG_INFO
 #endif
 
-#define DEFAULT_PARAMS_PATH        DEFAULT_BASE_PATH "/parametri"
-#define DEFAULT_PROGRAMS_PATH      DEFAULT_BASE_PATH "/programmi"
-#define DEFAULT_PATH_FILE_PARMAC   DEFAULT_PARAMS_PATH "/parmac.bin"
-#define DEFAULT_PATH_FILE_PASSWORD DEFAULT_PARAMS_PATH "/password.txt"
-#define INDEX_FILE_NAME            "index.txt"
-#define LOGFILE                    "/tmp/DS2021_log.txt"
-#define MAX_LOGFILE_SIZE           4000000UL
-#define SKELETON_KEY               "5510726719"
-#define SETTINGS_PASSWORD          "72346"
-#define LANGUAGE_RESET_DELAY       15000UL
+#define CONFIG_DATA_VERSION 1
+
+#define DRIVE_MOUNT_PATH               "/tmp/mnt"
+#define INDEX_FILE_NAME                "index.txt"
+#define DEFAULT_PARAMS_PATH            DEFAULT_BASE_PATH "/parametri"
+#define DEFAULT_PROGRAMS_PATH          DEFAULT_BASE_PATH "/programmi"
+#define DEFAULT_PATH_FILE_DATA_VERSION DEFAULT_BASE_PATH "version.txt"
+#define DEFAULT_PATH_FILE_PARMAC       DEFAULT_PARAMS_PATH "/parmac.bin"
+#define DEFAULT_PATH_FILE_PASSWORD     DEFAULT_PARAMS_PATH "/password.txt"
+#define DEFAULT_PATH_FILE_INDEX        DEFAULT_PROGRAMS_PATH "/" INDEX_FILE_NAME
+#define LOGFILE                        "/tmp/DS2021_log.txt"
+#define MAX_LOGFILE_SIZE               4000000UL
+#define SKELETON_KEY                   "5510726719"
+#define SETTINGS_PASSWORD              "72346"
+#define LANGUAGE_RESET_DELAY           15000UL
+#define ARCHIVE_EXTENSION              ".DS2021.tar.gz"
 
 
 #endif

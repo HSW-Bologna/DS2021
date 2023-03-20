@@ -14,6 +14,12 @@
 #include "log.h"
 #include "config/app_conf.h"
 
+#define DIR_CHECK(x)                                                                                                   \
+    {                                                                                                                  \
+        int res = x;                                                                                                   \
+        if (res < 0)                                                                                                   \
+            log_error("Errore nel maneggiare una cartella: %s", strerror(errno));                                      \
+    }
 
 #ifdef TARGET_DEBUG
 #define remount_ro()
@@ -29,9 +35,19 @@ static inline void remount_rw() {
         log_error("Errore nel montare la partizione %s: %s (%i)", DEFAULT_BASE_PATH, strerror(errno), errno);
 }
 #endif
+#define BASENAME(x) (strrchr(x, '/') + 1)
 
 
-static int is_file(const char *path);
+static int   is_file(const char *path);
+static int   is_dir(const char *path);
+static int   dir_exists(char *name);
+static int   is_drive(const char *path);
+static char *nth_strrchr(const char *str, char c, int n);
+static int   count_occurrences(const char *str, char c);
+static void  add_entry_from_data(struct archive *a, struct archive_entry *entry, uint8_t *data, size_t len, char *name);
+static void  add_entry_from_path(struct archive *a, struct archive_entry *entry, char *path, char *name);
+static int   copy_archive(struct archive *ar, struct archive *aw);
+static void  create_dir(char *name);
 
 
 int storage_load_parmac(char *path, parmac_t *parmac) {
@@ -324,9 +340,435 @@ void storage_clear_file(const char *path) {
 }
 
 
+int storage_list_saved_machines(char *location, name_t **names) {
+    int            count = 0, num = 0;
+    struct dirent *dir;
+    char           path[300];
+
+    DIR *d = opendir(location);
+
+    if (d != NULL) {
+        while ((dir = readdir(d)) != NULL) {
+            snprintf(path, sizeof(path), "%s/%s", location, dir->d_name);
+            if (is_file(path)) {
+                num++;
+            }
+        }
+
+        *names = realloc(*names, sizeof(name_t) * num);
+        memset(*names, 0, sizeof(name_t) * num);
+        rewinddir(d);
+
+        while ((dir = readdir(d)) != NULL && count < num) {
+            snprintf(path, sizeof(path), "%s/%s", location, dir->d_name);
+
+            if (!is_file(path)) {
+                continue;
+            }
+
+            char *ext = nth_strrchr(dir->d_name, '.', count_occurrences(ARCHIVE_EXTENSION, '.'));
+            if (strcmp(ext, ARCHIVE_EXTENSION)) {
+                continue;
+            }
+
+            int len = strlen(dir->d_name) - strlen(ARCHIVE_EXTENSION);
+            len     = len > MAX_NAME_SIZE ? MAX_NAME_SIZE : len;
+            memcpy((*names)[count], dir->d_name, len);
+            count++;
+        }
+        closedir(d);
+    }
+
+    return count;
+}
+
+
+int storage_save_current_machine_config(const char *destination, const char *name) {
+    struct archive       *a;
+    struct archive_entry *entry;
+    char                  path[300], filename[256], buffer[17];
+    char                 *names[MAX_PROGRAMS];
+
+    int num = storage_list_saved_programs(DEFAULT_PROGRAMS_PATH, names);
+
+    remount_rw();
+
+    snprintf(path, sizeof(path), "%s/%s%s", destination, name, ARCHIVE_EXTENSION);
+    a = archive_write_new();
+    archive_write_add_filter_gzip(a);
+    archive_write_set_format_pax_restricted(a);     // Note 1
+    if (archive_write_open_filename(a, path) != ARCHIVE_OK) {
+        log_error("Errore nell'aprire l'archivio: %s", archive_error_string(a));
+        remount_ro();
+        return 1;
+    }
+    entry = archive_entry_new();     // Note 2
+
+    sprintf(filename, "%s", BASENAME(DEFAULT_PATH_FILE_DATA_VERSION));
+    snprintf(buffer, 16, "%i", CONFIG_DATA_VERSION);
+    add_entry_from_data(a, entry, (uint8_t *)buffer, strlen(buffer), filename);
+
+    sprintf(filename, "%s/%s", BASENAME(DEFAULT_PROGRAMS_PATH), INDEX_FILE_NAME);
+    add_entry_from_path(a, entry, DEFAULT_PATH_FILE_INDEX, filename);
+
+    sprintf(filename, "%s/%s", BASENAME(DEFAULT_PARAMS_PATH), BASENAME(DEFAULT_PATH_FILE_PARMAC));
+    add_entry_from_path(a, entry, DEFAULT_PATH_FILE_PARMAC, filename);
+
+    for (int i = 0; i < num; i++) {
+        sprintf(path, "%s/%s", DEFAULT_PROGRAMS_PATH, names[i]);
+        sprintf(filename, "%s/%s", BASENAME(DEFAULT_PROGRAMS_PATH), names[i]);
+        add_entry_from_path(a, entry, path, filename);
+        free(names[i]);
+    }
+
+    archive_entry_free(entry);
+    archive_write_close(a);
+    archive_write_free(a);
+    sync();
+
+    remount_ro();
+
+    return 0;
+}
+
+
+int storage_read_archive_data_version(const char *location, const char *name) {
+    struct archive       *a;
+    struct archive_entry *entry;
+    int                   r, res = 0;
+    char                  path[256];
+
+    remount_rw();
+
+    a = archive_read_new();
+    archive_read_support_filter_all(a);
+    archive_read_support_format_all(a);
+
+    sprintf(path, "%s/%s%s", location, name, ARCHIVE_EXTENSION);
+    if ((r = archive_read_open_filename(a, path, 10240))) {
+        log_error("Non sono riuscito ad aprire l'archivio: %s\n", archive_error_string(a));
+        remount_ro();
+        return -1;
+    }
+
+    for (;;) {
+        r                = archive_read_next_header(a, &entry);
+        const char *path = archive_entry_pathname(entry);
+        if (r == ARCHIVE_EOF)
+            break;
+        if (r < ARCHIVE_OK)
+            log_warn("%s\n", archive_error_string(a));
+        if (r < ARCHIVE_WARN)
+            break;
+
+        if (strcmp(path, BASENAME(DEFAULT_PATH_FILE_DATA_VERSION)))
+            continue;
+
+        char buffer[17] = {0};
+        int  len        = archive_read_data(a, buffer, 16);
+        if (len > 0) {
+            res = atoi(buffer);
+            break;
+        } else {
+            log_warn("Non sono riuscito a leggere la versione dei dati: %s\n", archive_error_string(a));
+            res = -1;
+            break;
+        }
+    }
+    archive_read_close(a);
+    archive_read_free(a);
+
+    remount_ro();
+
+    return res;
+}
+
+
+int storage_load_current_machine_config(const char *location, const char *name) {
+    struct archive       *a;
+    struct archive       *ext;
+    struct archive_entry *entry;
+
+    int  r;
+    char newname[256];
+    char path[256];
+
+    remount_rw();
+
+    a = archive_read_new();
+    archive_read_support_filter_all(a);
+    archive_read_support_format_all(a);
+    ext = archive_write_disk_new();
+    archive_write_disk_set_options(ext, 0);
+    // archive_write_disk_set_standard_lookup(ext);
+
+    sprintf(path, "%s/%s%s", location, name, ARCHIVE_EXTENSION);
+    if ((r = archive_read_open_filename(a, path, 10240))) {
+        log_error("Non sono riuscito ad aprire l'archivio: %s\n", archive_error_string(a));
+        remount_ro();
+        return -1;
+    }
+
+    for (;;) {
+        r = archive_read_next_header(a, &entry);
+
+        if (r == ARCHIVE_EOF)
+            break;
+        if (r < ARCHIVE_OK)
+            log_warn("%s\n", archive_error_string(a));
+        if (r < ARCHIVE_WARN)
+            break;
+
+        const char *path = archive_entry_pathname(entry);
+
+        if (strcmp(path, BASENAME(DEFAULT_PATH_FILE_DATA_VERSION)) == 0) {
+            continue;
+        }
+
+        sprintf(newname, "%s/%s", DEFAULT_BASE_PATH, path);
+        archive_entry_set_pathname(entry, newname);
+
+        r = archive_write_header(ext, entry);
+        if (r < ARCHIVE_OK)
+            log_warn("%s\n", archive_error_string(ext));
+
+        else if (archive_entry_size(entry) > 0) {
+            r = copy_archive(a, ext);
+            if (r < ARCHIVE_OK) {
+                log_warn("%s\n", archive_error_string(ext));
+            }
+            if (r < ARCHIVE_WARN) {
+                break;
+            }
+        }
+        r = archive_write_finish_entry(ext);
+        if (r < ARCHIVE_OK) {
+            log_warn("%s\n", archive_error_string(ext));
+        }
+        if (r < ARCHIVE_WARN) {
+            break;
+        }
+    }
+    archive_read_close(a);
+    archive_read_free(a);
+    archive_write_close(ext);
+    archive_write_free(ext);
+
+    remount_ro();
+
+    return 0;
+}
+
+
+/*
+ *  Chiavetta USB
+ */
+
+char storage_is_drive_plugged(void) {
+#ifdef TARGET_DEBUG
+    return is_dir(DRIVE_MOUNT_PATH);
+#else
+    char drive[32];
+    for (char c = 'a'; c < 'h'; c++) {
+        snprintf(drive, sizeof(drive), "/dev/sd%c", c);
+        if (is_drive(drive))
+            return c;
+    }
+    return 0;
+#endif
+}
+
+
+int storage_mount_drive(void) {
+#ifdef TARGET_DEBUG
+    return 0;
+#else
+    char path[80];
+    char drive[64];
+
+    if (!dir_exists(DRIVE_MOUNT_PATH))
+        create_dir(DRIVE_MOUNT_PATH);
+
+    char c = storage_is_drive_plugged();
+    if (!c) {
+        return -1;
+    }
+
+    snprintf(drive, sizeof(drive), "/dev/sd%c", c);
+    snprintf(path, sizeof(path), "%s1", drive);
+    if (!is_drive(path)) {     // Se presente monta la prima partizione
+        strcpy(path, drive);
+        log_info("Non trovo una partizione; monto %s", path);
+    } else {
+        log_info("Trovata partizione %s", path);
+    }
+
+    if (mount(path, DRIVE_MOUNT_PATH, "vfat", 0, NULL) < 0) {
+        if (errno == EBUSY)     // Il file system era gia' montato
+            return 0;
+
+        log_error("Errore nel montare il disco %s: %s (%i)", path, strerror(errno), errno);
+        return -1;
+    }
+    return 0;
+#endif
+}
+
+
+void storage_unmount_drive(void) {
+#ifdef TARGET_DEBUG
+    return;
+#endif
+    if (dir_exists(DRIVE_MOUNT_PATH)) {
+        if (umount(DRIVE_MOUNT_PATH) < 0) {
+            log_warn("Umount error: %s (%i)", strerror(errno), errno);
+        }
+        rmdir(DRIVE_MOUNT_PATH);
+    }
+}
+
+
+
+/*
+ *  Static functions
+ */
+
+
+static int is_dir(const char *path) {
+    struct stat path_stat;
+    if (stat(path, &path_stat) < 0)
+        return 0;
+    return S_ISDIR(path_stat.st_mode);
+}
+
+
 static int is_file(const char *path) {
     struct stat path_stat;
     if (stat(path, &path_stat) < 0)
         return 0;
     return S_ISREG(path_stat.st_mode);
+}
+
+
+static int is_drive(const char *path) {
+    struct stat path_stat;
+    if (stat(path, &path_stat) < 0)
+        return 0;
+    return S_ISBLK(path_stat.st_mode);
+}
+
+
+static int dir_exists(char *name) {
+    DIR *dir = opendir(name);
+    if (dir) {
+        closedir(dir);
+        return 1;
+    }
+    return 0;
+}
+
+
+static char *nth_strrchr(const char *str, char c, int n) {
+    const char *s = &str[strlen(str) - 1];
+
+    while ((n -= (*s == c)) && (s != str)) {
+        s--;
+    }
+
+    return (char *)s;
+}
+
+
+static int count_occurrences(const char *str, char c) {
+    int i = 0;
+    for (i = 0; str[i]; str[i] == c ? i++ : *str++)
+        ;
+    return i;
+}
+
+
+/*
+ *  Archivio di configurazioni macchina
+ */
+
+static void add_entry_from_data(struct archive *a, struct archive_entry *entry, uint8_t *data, size_t len, char *name) {
+    archive_entry_set_pathname(entry, name);
+    archive_entry_set_size(entry, len);
+    archive_entry_set_filetype(entry, AE_IFREG);
+    archive_entry_set_perm(entry, 0644);
+    if (archive_write_header(a, entry) != ARCHIVE_OK) {
+        log_warn("Errore nella creazione dell'archivio: %s", archive_error_string(a));
+        return;
+    }
+
+    if (archive_write_data(a, data, len) < 0)
+        log_warn("Errore nella scrittura dell'archivio: %s", archive_error_string(a));
+
+    archive_entry_clear(entry);
+}
+
+
+
+static void add_entry_from_path(struct archive *a, struct archive_entry *entry, char *path, char *name) {
+    char        buff[2048];
+    int         len, fd;
+    struct stat st;
+
+    stat(path, &st);
+    archive_entry_set_pathname(entry, name);
+    archive_entry_set_size(entry, st.st_size);
+    archive_entry_set_filetype(entry, AE_IFREG);
+    archive_entry_set_perm(entry, 0644);
+    if (archive_write_header(a, entry) != ARCHIVE_OK) {
+        log_warn("Errore nella creazione dell'archivio: %s", archive_error_string(a));
+        return;
+    }
+
+    if ((fd = open(path, O_RDONLY)) < 0) {
+        log_warn("Non riesco ad aprire il file %s:%s", path, strerror(errno));
+        return;
+    }
+
+    len = read(fd, buff, sizeof(buff));
+    while (len > 0) {
+        if (archive_write_data(a, buff, len) < 0) {
+            log_warn("Errore nella scrittura dell'archivio: %s", archive_error_string(a));
+            break;
+        }
+        len = read(fd, buff, sizeof(buff));
+    }
+    close(fd);
+    archive_entry_clear(entry);
+}
+
+
+static int copy_archive(struct archive *ar, struct archive *aw) {
+    int         r;
+    const void *buff;
+    size_t      size;
+#if ARCHIVE_VERSION_NUMBER >= 3000000
+    int64_t offset;
+#else
+    off_t offset;
+#endif
+
+    for (;;) {
+        r = archive_read_data_block(ar, &buff, &size, &offset);
+        if (r == ARCHIVE_EOF)
+            return (ARCHIVE_OK);
+        if (r != ARCHIVE_OK)
+            return (r);
+        r = archive_write_data_block(aw, buff, size, offset);
+        if (r != ARCHIVE_OK) {
+            printf("archive_write_data_block(): %s", archive_error_string(aw));
+            return (r);
+        }
+    }
+}
+
+
+static void create_dir(char *name) {
+    remount_rw();
+    DIR_CHECK(mkdir(name, 0766));
+    remount_ro();
 }

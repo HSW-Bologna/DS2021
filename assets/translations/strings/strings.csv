@@ -47,3 +47,22 @@ LIVELLO_DI_ACCESSO, Livello di accesso, Access level
 CODICE_ALLARME, Codice allarme, Alarm code
 OBLO_APERTO, Attenzione: l'oblo e' aperto., Warning: the porthole is open.
 EMERGENZA, Attenzione: e' stato premuto il tasto di emergenza!, Warning: the emergency button was pressed!
+ALLARME_RISCALDAMENTO, Attenzione: non riesco a raggiungere la temperatura richiesta, Warning: I am unable to reach the setpoint temperature
+ALLARME_TEMPERATURA, Attenzione: temperatura rilevata oltre il limite consentito!, Warning: perceived temperature over the allowed limit!
+MODELLO_MACCHINA_IN_USO, Modello macchina in uso, Current machine model
+MODELLO_MACCHINA, Modello macchina, Machine model
+GESTIONE_CHIAVETTA_ESTERNA, Gestione chiavetta esterna, External drive management
+ESPORTA_MACCHINA_SU_CHIAVETTA, Esporta la macchina sulla chiavetta, Export the machine on the thumb drive
+IMPORTA_MACCHINA_DA_CHIAVETTA, Importa la macchina dalla chiavetta, Import the machine from the thumb drive
+CONFERMA_ESPORTA, La periferica di archiviazione contiene una o piu' macchine con lo stesso nome di quelle che si vogliono esportare: verranno sovrascritte. Continuare?, The thumb drive contains one or more machines with the same name: they will be overwritten. Confirm?
+SCEGLI_CONFIGURAZIONI, Scegli le configurazioni da importare, Choose the configurations to be imported
+ERRORE_DISCO, Errore durante l'operazione su disco!, Error during disk operation
+STATISTICHE, Statistiche, Statistics
+TEMPO_ACCESO, Tempo acceso, On time
+TEMPO_DI_LAVORO, Tempo di lavoro, Work time
+TEMPO_IN_MOTO, Tempo in moto, Rotation time
+TEMPO_DI_VENTILAZIONE, Tempo di ventilazione, Ventilation time
+TEMPO_IN_RISCALDAMENTO, Tempo in riscaldamento, Heating time
+COMUNICAZIONE_MACCHINA, Comunicazione macchina, Machine communication
+CICLI_COMPLETI, Cicli completi, Complete cycles
+CICLI_PARZIALI, Cicli parziali, Partial cycles

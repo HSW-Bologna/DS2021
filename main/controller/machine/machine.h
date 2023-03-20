@@ -9,11 +9,12 @@
 #define COMMAND_REGISTER_RUN_STEP     1
 #define COMMAND_REGISTER_STOP         2
 #define COMMAND_REGISTER_PAUSE        3
-#define COMMAND_REGISTER_CLEAR_ALARMS 4
-#define COMMAND_REGISTER_CLEAR_COINS  5
-#define COMMAND_REGISTER_ENTER_TEST   6
-#define COMMAND_REGISTER_EXIT_TEST    7
-#define COMMAND_REGISTER_INITIALIZE   8
+#define COMMAND_REGISTER_DONE         4
+#define COMMAND_REGISTER_CLEAR_ALARMS 5
+#define COMMAND_REGISTER_CLEAR_COINS  6
+#define COMMAND_REGISTER_ENTER_TEST   7
+#define COMMAND_REGISTER_EXIT_TEST    8
+#define COMMAND_REGISTER_INITIALIZE   9
 
 
 
@@ -23,6 +24,7 @@ typedef enum {
     MACHINE_RESPONSE_MESSAGE_CODE_READ_EXTENDED_STATE,
     MACHINE_RESPONSE_MESSAGE_CODE_TEST_READ_INPUT,
     MACHINE_RESPONSE_MESSAGE_CODE_READ_SENSORS,
+    MACHINE_RESPONSE_MESSAGE_CODE_READ_STATISTICS,
     MACHINE_RESPONSE_MESSAGE_CODE_VERSION,
 } machine_response_message_code_t;
 
@@ -59,8 +61,10 @@ typedef struct {
             uint16_t t2_adc;
             uint16_t t1;
             uint16_t t2;
-            uint16_t configured_temperature;
+            uint16_t actual_temperature;
         };
+
+        statistics_t stats;
     };
 } machine_response_message_t;
 
@@ -78,5 +82,11 @@ void machine_send_parmac(parmac_t *parmac);
 void machine_send_step(parameters_step_t *step, size_t prog_num, size_t step_num, int start);
 void machine_refresh_sensors(void);
 void machine_get_extended_state(void);
+void machine_change_speed(uint16_t speed);
+void machine_change_temperature(uint16_t temperature);
+void machine_change_humidity(uint16_t humidity);
+void machine_change_remaining_time(uint16_t seconds);
+void machine_read_statistics(void);
+void machine_stop_communication(void);
 
 #endif

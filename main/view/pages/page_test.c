@@ -274,7 +274,7 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                     }
 
                     case RETRY_COMM_BTN_ID:
-                        msg.cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_RESTART_COMMUNICATION;
+                        msg.cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_TOGGLE_COMMUNICATION;
                         break;
 
                     case DISABLE_COMM_BTN_ID:

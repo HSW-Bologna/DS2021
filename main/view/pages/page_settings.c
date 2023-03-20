@@ -44,6 +44,7 @@ enum {
     TABVIEW_ID,
     PASSWORD_ID,
     PASSWORD_KEYBOARD_ID,
+    STATS_BTN_ID,
     BLANKET_ID,
 };
 
@@ -53,6 +54,7 @@ struct page_data {
     struct {
         lv_obj_t *password;
         int       tosave;
+        lv_obj_t *drive_btn;
     } user;
     struct {
         lv_obj_t *tab;
@@ -73,11 +75,41 @@ struct page_data {
         int       index_to_save;
     } prog;
 
+    struct {
+        lv_obj_t *test_btn;
+    } diagnose;
+
     lv_obj_t *blanket;
     lv_obj_t *password_blanket;
     size_t    waiting_io;
     size_t    selected_tab;
 };
+
+
+static void table_draw_event(lv_event_t *e) {
+    lv_obj_t               *obj = lv_event_get_target(e);
+    lv_obj_draw_part_dsc_t *dsc = lv_event_get_param(e);
+    /*If the cells are drawn...*/
+    if (dsc->part == LV_PART_ITEMS) {
+        uint32_t row = dsc->id / lv_table_get_col_cnt(obj);
+        uint32_t col = dsc->id - row * lv_table_get_col_cnt(obj);
+
+        /*Make the texts in the first cell center aligned*/
+        if (row == 1) {
+            dsc->rect_dsc->bg_color      = lv_color_darken(lv_palette_main(LV_PALETTE_RED), LV_OPA_30);
+            dsc->rect_dsc->bg_grad_color = lv_palette_main(LV_PALETTE_RED);
+            dsc->rect_dsc->bg_opa        = LV_OPA_COVER;
+        } else if (row == 2) {
+            dsc->rect_dsc->bg_color      = lv_color_darken(lv_palette_main(LV_PALETTE_GREEN), LV_OPA_30);
+            dsc->rect_dsc->bg_grad_color = lv_palette_main(LV_PALETTE_GREEN);
+            dsc->rect_dsc->bg_opa        = LV_OPA_COVER;
+        } else if (row == 3) {
+            dsc->rect_dsc->bg_color      = lv_color_darken(lv_palette_main(LV_PALETTE_BLUE), LV_OPA_30);
+            dsc->rect_dsc->bg_grad_color = lv_palette_main(LV_PALETTE_BLUE);
+            dsc->rect_dsc->bg_opa        = LV_OPA_COVER;
+        }
+    }
+}
 
 
 static size_t num_of_io_operations_to_wait(model_t *pmodel, struct page_data *data) {
@@ -129,6 +161,24 @@ static lv_obj_t *create_program_name_kb(lv_obj_t *root, model_t *pmodel) {
 }
 
 
+static void update_test_btn(model_t *pmodel, struct page_data *data) {
+    if (model_is_machine_communication_active(pmodel)) {
+        lv_obj_clear_state(data->diagnose.test_btn, LV_STATE_DISABLED);
+    } else {
+        lv_obj_add_state(data->diagnose.test_btn, LV_STATE_DISABLED);
+    }
+}
+
+
+static void update_drive_btn(struct page_data *data, model_t *pmodel) {
+    if (model_is_drive_mounted(pmodel)) {
+        lv_obj_clear_state(data->user.drive_btn, LV_STATE_DISABLED);
+    } else {
+        lv_obj_add_state(data->user.drive_btn, LV_STATE_DISABLED);
+    }
+}
+
+
 static void update_prog_list(struct page_data *data, model_t *pmodel) {
     lv_obj_t *focus = NULL;
     size_t    i     = 0;
@@ -145,7 +195,7 @@ static void update_prog_list(struct page_data *data, model_t *pmodel) {
         view_register_object_default_callback_with_number(btn, PROGRAM_BTN_ID, i);
         lv_obj_add_flag(btn, LV_OBJ_FLAG_CHECKABLE);
     }
-    view_common_select_btn_in_list(data->prog.list, model_get_num_programs(pmodel), data->prog.selected_prog);
+    view_common_select_btn_in_list(data->prog.list, data->prog.selected_prog);
 
     if (focus) {
         // TODO: add again
@@ -182,6 +232,8 @@ static void update_param_list(struct page_data *data, model_t *pmodel) {
 
     for (size_t i = 0; i < maxp; i++) {
         lv_obj_t *btn = lv_list_add_btn(data->parmac.list, NULL, NULL);
+        lv_obj_set_style_bg_color(btn, lv_theme_get_color_secondary(btn), LV_STATE_CHECKED);
+        lv_obj_add_flag(btn, LV_OBJ_FLAG_CHECKABLE);
         view_register_object_default_callback_with_number(btn, PARAMETER_BTN_ID, i);
 
         lv_obj_t *l1 = lv_label_create(btn);
@@ -190,15 +242,18 @@ static void update_param_list(struct page_data *data, model_t *pmodel) {
         lv_obj_t   *l2   = lv_label_create(btn);
         const char *text = parmac_get_description(pmodel, i);
         lv_label_set_text(l2, text);
-        lv_label_set_long_mode(l2, LV_LABEL_LONG_SCROLL_CIRCULAR);
+        lv_label_set_long_mode(l2, LV_LABEL_LONG_SCROLL);
         lv_obj_set_width(l2, 360);
+        lv_obj_set_style_anim_speed(l2, 12, LV_STATE_DEFAULT);
         lv_obj_align(l1, LV_ALIGN_LEFT_MID, 8, -20);
         lv_obj_align_to(l2, l1, LV_ALIGN_OUT_RIGHT_MID, 10, 0);
 
         char      string[128] = {0};
         lv_obj_t *l3          = lv_label_create(btn);
+        lv_label_set_long_mode(l3, LV_LABEL_LONG_DOT);
+        lv_obj_set_width(l3, 180);
         lv_label_set_text(l3, parmac_to_string(pmodel, string, sizeof(string), i));
-        lv_obj_align(l3, LV_ALIGN_RIGHT_MID, -8, 0);
+        lv_obj_align(l3, LV_ALIGN_RIGHT_MID, 0, 0);
     }
 
     lv_obj_scroll_to_y(data->parmac.list, rescroll, 0);
@@ -247,6 +302,7 @@ static void create_tab_user(lv_obj_t *tab, model_t *pmodel, struct page_data *da
 
     btn = view_common_icon_button(tab, LV_SYMBOL_DRIVE, DRIVE_BTN_ID);
     lv_obj_align_to(btn, prev_btn, LV_ALIGN_OUT_TOP_MID, 0, -10);
+    data->user.drive_btn = btn;
 
     btn           = lv_btn_create(tab);
     lv_obj_t *lbl = lv_label_create(btn);
@@ -279,11 +335,13 @@ static void create_tab_test(lv_obj_t *tab, model_t *pmodel, struct page_data *da
     view_register_object_default_callback(btn, TEST_BTN_ID);
     lv_obj_align(lbl, LV_ALIGN_CENTER, 0, 0);
     lv_obj_align(btn, LV_ALIGN_BOTTOM_LEFT, 10, -80);
+    data->diagnose.test_btn = btn;
 
     btn = lv_btn_create(tab);
     lv_obj_set_size(btn, 240, 60);
     lbl = lv_label_create(btn);
     lv_label_set_text(lbl, view_intl_get_string(pmodel, STRINGS_STATISTICHE));
+    view_register_object_default_callback(btn, STATS_BTN_ID);
     lv_obj_align(lbl, LV_ALIGN_CENTER, 0, 0);
     lv_obj_align(btn, LV_ALIGN_BOTTOM_LEFT, 10, -10);
 
@@ -303,6 +361,7 @@ static void create_tab_test(lv_obj_t *tab, model_t *pmodel, struct page_data *da
     lv_obj_align(btn, LV_ALIGN_BOTTOM_LEFT, 280, -80);
 
     lv_obj_t *table = lv_table_create(tab);
+    lv_obj_add_event_cb(table, table_draw_event, LV_EVENT_DRAW_PART_BEGIN, NULL);
     lv_table_set_cell_value(table, 0, 1, view_intl_get_string(pmodel, STRINGS_VERSIONE));
     lv_table_set_cell_value(table, 0, 2, view_intl_get_string(pmodel, STRINGS_DATA));
     lv_table_set_cell_value(table, 1, 0, view_intl_get_string(pmodel, STRINGS_INTERFACCIA));
@@ -349,6 +408,8 @@ static void open_page(model_t *pmodel, void *arg) {
 
     update_param_list(data, pmodel);
     update_prog_list(data, pmodel);
+    update_drive_btn(data, pmodel);
+    update_test_btn(pmodel, data);
 }
 
 
@@ -357,6 +418,14 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
     struct page_data *data = arg;
 
     switch (event.code) {
+        case VIEW_EVENT_CODE_DRIVE:
+            update_drive_btn(data, pmodel);
+            break;
+
+        case VIEW_EVENT_CODE_ALARM:
+            update_test_btn(pmodel, data);
+            break;
+
         case VIEW_EVENT_CODE_OPEN:
         case VIEW_EVENT_CODE_STATE_CHANGED:
             if (model_is_in_test(pmodel)) {
@@ -367,10 +436,16 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
 
         case VIEW_EVENT_CODE_IO_DONE:
             if (event.io_op == SAVE_ALL_IO_ID) {
-                if (--data->waiting_io == 0) {
+                if (event.error) {
+                    view_common_io_error_toast(pmodel);
+                    msg.vmsg.code = VIEW_PAGE_MESSAGE_CODE_BACK;
+                } else if (--data->waiting_io == 0) {
                     msg.vmsg.code = VIEW_PAGE_MESSAGE_CODE_BACK;
                 }
             } else {
+                if (event.error) {
+                    view_common_io_error_toast(pmodel);
+                }
                 msg.vmsg.code  = VIEW_PAGE_MESSAGE_CODE_CHANGE_PAGE_EXTRA;
                 msg.vmsg.extra = event.io_data;
                 msg.vmsg.page  = (void *)&page_log;
@@ -385,6 +460,11 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                             lv_obj_del(data->password_blanket);
                             data->password_blanket = NULL;
                         }
+                        break;
+
+                    case STATS_BTN_ID:
+                        msg.vmsg.code = VIEW_PAGE_MESSAGE_CODE_CHANGE_PAGE;
+                        msg.vmsg.page = (void *)&page_stats;
                         break;
 
                     case SETTINGS_BTN_ID:
@@ -412,7 +492,8 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                         break;
 
                     case DRIVE_BTN_ID:
-                        view_common_toast("Funzionalita' non ancora implementata");
+                        msg.vmsg.code = VIEW_PAGE_MESSAGE_CODE_CHANGE_PAGE;
+                        msg.vmsg.page = (void *)&page_drive;
                         break;
 
                     case PARAMETER_KB_ID:
@@ -426,8 +507,7 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
 
                     case PROGRAM_BTN_ID:
                         data->prog.selected_prog = event.data.number;
-                        view_common_select_btn_in_list(data->prog.list, model_get_num_programs(pmodel),
-                                                       data->prog.selected_prog);
+                        view_common_select_btn_in_list(data->prog.list, data->prog.selected_prog);
                         lv_btnmatrix_clear_btn_ctrl_all(data->prog.btnmx, LV_BTNMATRIX_CTRL_DISABLED);
                         break;
 
@@ -496,6 +576,7 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                         if (data->parmac.editor != NULL) {
                             lv_obj_del(data->parmac.editor);
                         }
+                        view_common_select_btn_in_list(data->parmac.list, event.data.number);
                         parameter_clone(&data->parmac.par, parmac_get_handle(pmodel, event.data.number),
                                         (void *)&data->parmac.par_buffer);
                         data->parmac.num = event.data.number;

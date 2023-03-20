@@ -115,14 +115,14 @@ def main():
         "CPPPATH": CPPPATH,
         'CPPDEFINES': [],
         "CCFLAGS": CFLAGS + ["-DTARGET_DEBUG", "-DUSE_SDL=1"],
-        "LIBS": ["-lpthread", "-lSDL2"]
+        "LIBS": ["-lpthread", "-lSDL2", "-larchive"]
     }
 
     simulated_env = Environment(**env_options)
     simulated_env.Tool('compilation_db')
 
     target_env = simulated_env.Clone(
-        LIBS=["-lpthread"], CC="~/Mount/Data/Projects/buildrpi/output/host/bin/aarch64-buildroot-linux-uclibc-gcc",
+        LIBS=["-lpthread", "-larchive"], CC="~/Mount/Data/Projects/buildrpi/output/host/bin/aarch64-buildroot-linux-uclibc-gcc",
         CCFLAGS=CFLAGS + ["-DUSE_FBDEV=1", "-DUSE_EVDEV=1"])
 
     simulated_prog = get_target(

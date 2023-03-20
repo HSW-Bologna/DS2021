@@ -3,6 +3,7 @@ LINGUA, Lingua, Language
 ABILITA_GAS, Abilita gas, Enable gas
 ABILITA_EXP_RS485, Abilita espansione I/O RS485, Enable RS485 I/O expansion
 VELOCITA_MINIMA, Velocita' minima, Minimum speed
+VELOCITA_MASSIMA, Velocita' massima, Maximum speed
 TEMPO_GETTONE, Tempo gettone, Token time
 TEMPO_MARCIA, Tempo di marcia, Rotation time
 MAX_PROGRAMMI, Numero massimo di programmi, Max number of programs
@@ -34,3 +35,11 @@ TEMPO_STOP_AUTOMATICO, Tempo di azzeramento automatico del ciclo, Automatic cycl
 TEMPO_ATTESA_DEODORIZZAZIONE, Tempo di attesa per la deodorizzazione, Deodorant period delay
 TEMPO_DEODORIZZAZIONE, Tempo di deodorizzazione, Deodorant period duration
 AUTOAVVIO, Avvio automatico, Automatic start
+FERMA_TEMPO, Ferma il tempo durante la pausa, Stop the time during pause
+TEMPO_ATTESA_PARTENZA, Tempo di attesa in ventilazione all'inizio del ciclo, Wait time with ventilation at the beginning
+TASTO_MENU, Tasto menu' in ciclo, Menu button during cycle
+TIPO_SONDA_TEMPERATURA, Tipo di sonda di temperatura, Temperature probe type
+POSIZIONE_SONDA_TEMPERATURA, Posizione della sonda di tempertura, Temperature probe position
+TEMPERATURA_MAX_INGRESSO, Temperatura massima in ingresso, Max entry point temperature
+TEMPERATURA_MAX_USCITA, Temperatura massima in uscita, Max exit point temperature
+GESTIONE_ALLARMI, Gestione allarmi, Alarms management

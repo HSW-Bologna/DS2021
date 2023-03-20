@@ -80,8 +80,7 @@ static void update_step_list(struct page_data *data, model_t *pmodel) {
         view_register_object_default_callback_with_number(btn, STEP_BTN_ID, i);
         lv_obj_add_flag(btn, LV_OBJ_FLAG_CHECKABLE);
     }
-    view_common_select_btn_in_list(data->steplist, model_get_program(pmodel, data->num_prog)->num_steps,
-                                   data->selected_step);
+    view_common_select_btn_in_list(data->steplist, data->selected_step);
 
     if (focus) {
         // TODO: add again
@@ -243,8 +242,7 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
 
                     case STEP_BTN_ID:
                         data->selected_step = event.data.number;
-                        view_common_select_btn_in_list(
-                            data->steplist, model_get_program(pmodel, data->num_prog)->num_steps, data->selected_step);
+                        view_common_select_btn_in_list(data->steplist, data->selected_step);
                         lv_btnmatrix_clear_btn_ctrl_all(data->btnmx, LV_BTNMATRIX_CTRL_DISABLED);
                         if (model_get_program(pmodel, data->num_prog)->num_steps >= MAX_STEPS) {
                             lv_btnmatrix_set_btn_ctrl(data->btnmx, STEP_BTNMX_INSERT, LV_BTNMATRIX_CTRL_DISABLED);
