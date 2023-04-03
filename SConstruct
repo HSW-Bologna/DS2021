@@ -83,13 +83,18 @@ def get_target(env, name, suffix="", dependencies=[]):
     gel_selected = ["pagemanager", "collections",
                     "parameter", "timer"]
     (gel, include) = SConscript(
-        f'{COMPONENTS}/generic_embedded_libs/SConscript', variant_dir=f"build-{name}", exports=['gel_env', 'gel_selected'])
+        f'{COMPONENTS}/generic_embedded_libs/SConscript', variant_dir=f"build-{name}/gel", exports=['gel_env', 'gel_selected'])
+    env['CPPPATH'] += [include]
+
+    lv_pman_env = env
+    (lv_pman, include) = SConscript( f'{COMPONENTS}/lv_page_manager/SConscript', variant_dir=f"build-{name}/lv_pman", exports=['lv_pman_env'])
+    print(lv_pman, include)
     env['CPPPATH'] += [include]
 
     objects = [env.Object(
         f"{rchop(x.get_abspath(), '.c')}{suffix}", x) for x in sources]
 
-    target = env.Program(name, objects + [gel])
+    target = env.Program(name, objects + [gel, lv_pman])
     env.Depends(target, dependencies)
     env.Clean(target, f"build-{name}")
     return target

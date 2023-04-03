@@ -456,6 +456,7 @@ static void open_page(model_t *pmodel, void *arg) {
     lv_obj_set_style_bg_color(background, lv_palette_darken(LV_PALETTE_GREY, 3), LV_STATE_DEFAULT);
 
     lv_obj_t *img = lv_img_create(lv_scr_act());
+    lv_obj_clear_flag(lv_scr_act(), LV_OBJ_FLAG_SCROLLABLE);
     lv_img_set_src(img, &img_background);
     lv_obj_set_style_radius(img, 0, LV_STATE_DEFAULT);
     lv_obj_align(img, LV_ALIGN_CENTER, 0, 0);
@@ -480,13 +481,13 @@ static void open_page(model_t *pmodel, void *arg) {
 
     lv_obj_t         *meter = lv_meter_create(lv_scr_act());
     lv_meter_scale_t *scale = lv_meter_add_scale(meter);
-    lv_obj_set_size(meter, 555, 555);
+    lv_obj_set_size(meter, 432, 432);
     lv_meter_set_scale_range(meter, scale, 0, 100, 90, 90);
     lv_meter_set_scale_ticks(meter, scale, 10, 4, 20, meter_color);
     lv_meter_set_scale_major_ticks(meter, scale, 9, 5, 30, meter_color, 0);
     lv_meter_indicator_t *temp_indicator = lv_meter_add_arc(meter, scale, 16, lv_palette_main(LV_PALETTE_RED), 0);
     lv_meter_set_indicator_start_value(meter, temp_indicator, 0);
-    lv_obj_align(meter, LV_ALIGN_BOTTOM_LEFT, 20, -10);
+    lv_obj_align(meter, LV_ALIGN_BOTTOM_LEFT, 8, -10);
     data->temp_meter     = meter;
     data->temp_indicator = temp_indicator;
 
@@ -606,7 +607,7 @@ static void open_page(model_t *pmodel, void *arg) {
     data->lbl_step_num = lbl;
 
     btn = view_common_create_simple_image_button(lv_scr_act(), &img_play, &img_play_disabled, START_BTN_ID);
-    lv_obj_align(btn, LV_ALIGN_RIGHT_MID, -142, -4);
+    lv_obj_align(btn, LV_ALIGN_RIGHT_MID, -108, 0);
     data->btn_start = btn;
 
     btn = view_common_create_simple_image_button(lv_scr_act(), &img_stop, &img_stop, STOP_BTN_ID);
@@ -618,11 +619,11 @@ static void open_page(model_t *pmodel, void *arg) {
     data->btn_pause = btn;
 
     btn = view_common_create_simple_image_button(lv_scr_act(), &img_up, &img_up_disabled, PROGRAM_UP_BTN_ID);
-    lv_obj_align(btn, LV_ALIGN_RIGHT_MID, -135, -200);
+    lv_obj_align(btn, LV_ALIGN_RIGHT_MID, -90, -155);
     data->btn_up = btn;
 
     btn = view_common_create_simple_image_button(lv_scr_act(), &img_down, &img_down_disabled, PROGRAM_DOWN_BTN_ID);
-    lv_obj_align(btn, LV_ALIGN_RIGHT_MID, -135, 190);
+    lv_obj_align(btn, LV_ALIGN_RIGHT_MID, -90, 145);
     data->btn_down = btn;
 
     lbl            = lv_label_create(lv_scr_act());

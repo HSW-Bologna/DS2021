@@ -24,7 +24,9 @@ static pthread_mutex_t lock;
 
 
 int main(int argc, char *argv[]) {
-    model_t model;
+    static_model_updater_t model_updater_buffer;
+    model_t                model;
+    model_updater_t        model_updater = model_updater_init(&model, &model_updater_buffer);
 
     log_set_level(CONFIG_LOG_LEVEL);
     log_file_init();
@@ -34,12 +36,12 @@ int main(int argc, char *argv[]) {
     lv_init();
 #if USE_SDL
     sdl_init();
-    view_init(&model, sdl_display_flush, sdl_mouse_read);
+    view_init(model_updater, controller_manage_message, sdl_display_flush, sdl_mouse_read);
 #endif
 #if USE_FBDEV
     fbdev_init();
     evdev_init();
-    view_init(&model, fbdev_flush, evdev_read);
+    view_init(model_updater, controller_manage_message, fbdev_flush, evdev_read);
 #endif
 
     controller_init(&model);

@@ -192,6 +192,14 @@ void controller_process_msg(view_controller_message_t *msg, model_t *pmodel) {
 }
 
 
+
+void controller_manage_message(lv_pman_handle_t handle, void *msg) {
+    (void)handle;
+    //view_msg_t *view_msg = msg;
+    //lv_mem_free(view_msg);
+}
+
+
 void controller_manage(model_t *pmodel) {
     static unsigned long fastts     = 0;
     static unsigned long slowts     = 0;

@@ -3,10 +3,12 @@
 
 
 #include "model/model.h"
+#include "model/model_updater.h"
 #include "gel/pagemanager/page_manager.h"
+#include "lv_page_manager.h"
 
 
-void view_init(model_t *pmodel,
+void view_init(model_updater_t updater, lv_pman_user_msg_cb_t controller_cb,
                void (*flush_cb)(struct _lv_disp_drv_t *disp_drv, const lv_area_t *area, lv_color_t *color_p),
                void (*read_cb)(struct _lv_indev_drv_t *indev_drv, lv_indev_data_t *data));
 

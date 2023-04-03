@@ -7,6 +7,7 @@
 #include "theme/style.h"
 #include "theme/theme.h"
 #include "widgets/custom_tabview.h"
+#include "lv_page_manager.h"
 
 
 QUEUE_DECLARATION(event_queue, view_event_t, 12);
@@ -23,8 +24,10 @@ static struct event_queue q;
 static page_manager_t     pman;
 static lv_indev_t        *indev;
 
+static lv_pman_t page_manager = {0};
 
-void view_init(model_t *pmodel,
+
+void view_init(model_updater_t updater, lv_pman_user_msg_cb_t controller_cb,
                void (*flush_cb)(struct _lv_disp_drv_t *disp_drv, const lv_area_t *area, lv_color_t *color_p),
                void (*read_cb)(struct _lv_indev_drv_t *indev_drv, lv_indev_data_t *data)) {
     lv_init();
