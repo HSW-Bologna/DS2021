@@ -9,8 +9,8 @@
 
 void controller_gui_manage(model_t *pmodel) {
     static unsigned long last_invoked = 0;
-    view_message_t       umsg;
-    view_event_t         event;
+    //view_message_t       umsg;
+    //view_event_t         event;
 
     if (last_invoked != get_millis()) {
         if (last_invoked > 0) {
@@ -20,6 +20,7 @@ void controller_gui_manage(model_t *pmodel) {
     }
     lv_timer_handler();
 
+#if 0
     while (view_get_next_msg(pmodel, &umsg, &event)) {
         if (event.code == VIEW_EVENT_CODE_LVGL && event.event == LV_EVENT_CLICKED) {
             buzzer_beep(1, 50);
@@ -28,4 +29,5 @@ void controller_gui_manage(model_t *pmodel) {
         controller_process_msg(&umsg.cmsg, pmodel);
         view_process_msg(umsg.vmsg, pmodel);
     }
+#endif
 }

@@ -55,8 +55,16 @@ void controller_init(model_t *pmodel) {
 }
 
 
-void controller_process_msg(view_controller_message_t *msg, model_t *pmodel) {
-    switch (msg->code) {
+void controller_manage_message(lv_pman_handle_t handle, void *msg) {
+    model_updater_t updater = lv_pman_get_user_data(handle);
+    model_t        *pmodel  = (model_t *)model_updater_get(updater);
+
+    view_controller_message_t *cmsg = msg;
+    if (cmsg == NULL) {
+        return;
+    }
+
+    switch (cmsg->code) {
         case VIEW_CONTROLLER_MESSAGE_CODE_NOTHING:
             break;
 
@@ -65,19 +73,19 @@ void controller_process_msg(view_controller_message_t *msg, model_t *pmodel) {
             break;
 
         case VIEW_CONTROLLER_MESSAGE_CODE_CHANGE_REMAINING_TIME:
-            machine_change_remaining_time(msg->register_value);
+            machine_change_remaining_time(cmsg->register_value);
             break;
 
         case VIEW_CONTROLLER_MESSAGE_CODE_CHANGE_HUMIDITY:
-            machine_change_humidity(msg->register_value);
+            machine_change_humidity(cmsg->register_value);
             break;
 
         case VIEW_CONTROLLER_MESSAGE_CODE_CHANGE_TEMPERATURE:
-            machine_change_temperature(msg->register_value);
+            machine_change_temperature(cmsg->register_value);
             break;
 
         case VIEW_CONTROLLER_MESSAGE_CODE_CHANGE_SPEED:
-            machine_change_speed(msg->register_value);
+            machine_change_speed(cmsg->register_value);
             break;
 
         case VIEW_CONTROLLER_MESSAGE_CODE_EXPORT_CURRENT_MACHINE:
@@ -86,7 +94,7 @@ void controller_process_msg(view_controller_message_t *msg, model_t *pmodel) {
             break;
 
         case VIEW_CONTROLLER_MESSAGE_CODE_IMPORT_CURRENT_MACHINE:
-            disk_op_import_current_machine(msg->name, disk_io_callback_reload, disk_io_error_callback, NULL);
+            disk_op_import_current_machine(cmsg->name, disk_io_callback_reload, disk_io_error_callback, NULL);
             break;
 
         case VIEW_CONTROLLER_MESSAGE_CODE_READ_LOG_FILE:
@@ -99,7 +107,7 @@ void controller_process_msg(view_controller_message_t *msg, model_t *pmodel) {
 
         case VIEW_CONTROLLER_MESSAGE_CODE_START_PROGRAM:
             if (!model_is_program_running(pmodel)) {
-                model_start_program(pmodel, msg->program);
+                model_start_program(pmodel, cmsg->program);
                 machine_send_step(model_get_current_step(pmodel), model_get_current_program_number(pmodel),
                                   model_get_current_step_number(pmodel), 1);
                 pending_change = 1;
@@ -127,7 +135,7 @@ void controller_process_msg(view_controller_message_t *msg, model_t *pmodel) {
             break;
 
         case VIEW_CONTROLLER_MESSAGE_TEST_RELE:
-            machine_test_rele(msg->rele, msg->value);
+            machine_test_rele(cmsg->rele, cmsg->value);
             break;
 
         case VIEW_CONTROLLER_MESSAGE_CLEAR_COINS:
@@ -135,7 +143,7 @@ void controller_process_msg(view_controller_message_t *msg, model_t *pmodel) {
             break;
 
         case VIEW_CONTROLLER_MESSAGE_CODE_TEST_PWM:
-            machine_test_pwm(msg->pwm, msg->speed);
+            machine_test_pwm(cmsg->pwm, cmsg->speed);
             break;
 
         case VIEW_CONTROLLER_MESSAGE_CODE_TOGGLE_COMMUNICATION:
@@ -151,34 +159,34 @@ void controller_process_msg(view_controller_message_t *msg, model_t *pmodel) {
             break;
 
         case VIEW_CONTROLLER_MESSAGE_CODE_REMOVE_PROGRAM:
-            disk_op_remove_program(msg->name, disk_io_callback, disk_io_error_callback, NULL);
+            disk_op_remove_program(cmsg->name, disk_io_callback, disk_io_error_callback, NULL);
             break;
 
         case VIEW_CONTROLLER_MESSAGE_CODE_SAVE_ALL:
-            if (msg->password) {
+            if (cmsg->password) {
                 disk_op_save_password((char *)model_get_password(pmodel), disk_io_callback, disk_io_error_callback,
-                                      (void *)(uintptr_t)msg->save_all_io_op);
+                                      (void *)(uintptr_t)cmsg->save_all_io_op);
             }
-            if (msg->parmac) {
+            if (cmsg->parmac) {
                 machine_send_parmac(&pmodel->configuration.parmac);
                 disk_op_save_parmac(&pmodel->configuration.parmac, disk_io_callback, disk_io_error_callback,
-                                    (void *)(uintptr_t)msg->save_all_io_op);
+                                    (void *)(uintptr_t)cmsg->save_all_io_op);
             }
-            if (msg->index) {
+            if (cmsg->index) {
                 disk_op_save_program_index(pmodel, disk_io_callback, disk_io_error_callback,
-                                           (void *)(uintptr_t)msg->save_all_io_op);
+                                           (void *)(uintptr_t)cmsg->save_all_io_op);
             }
             for (size_t i = 0; i < MAX_PROGRAMS; i++) {
-                if (msg->programs & (1 << i)) {
+                if (cmsg->programs & (1 << i)) {
                     disk_op_save_program(model_get_program(pmodel, i), disk_io_callback, disk_io_error_callback,
-                                         (void *)(uintptr_t)msg->save_all_io_op);
+                                         (void *)(uintptr_t)cmsg->save_all_io_op);
                 }
             }
             break;
 
         case VIEW_CONTROLLER_MESSAGE_CODE_CONNECT_TO_WIFI_NETWORK:
-            log_info("Connessione a %s...", msg->ssid);
-            wifi_connect(msg->ssid, msg->psk);
+            log_info("Connessione a %s...", cmsg->ssid);
+            wifi_connect(cmsg->ssid, cmsg->psk);
             break;
 
         case VIEW_CONTROLLER_MESSAGE_CODE_WIFI_SCAN:
@@ -189,14 +197,8 @@ void controller_process_msg(view_controller_message_t *msg, model_t *pmodel) {
             disk_op_save_wifi_config(disk_io_callback, disk_io_error_callback, NULL);
             break;
     }
-}
 
-
-
-void controller_manage_message(lv_pman_handle_t handle, void *msg) {
-    (void)handle;
-    //view_msg_t *view_msg = msg;
-    //lv_mem_free(view_msg);
+    // lv_mem_free(cmsg);
 }
 
 

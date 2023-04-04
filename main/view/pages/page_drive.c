@@ -1,3 +1,4 @@
+#if 0
 #include "lvgl.h"
 #include "view/view.h"
 #include "gel/pagemanager/page_manager.h"
@@ -220,3 +221,4 @@ const pman_page_t page_drive = {
     .open          = open_page,
     .create        = create_page,
 };
+#endif

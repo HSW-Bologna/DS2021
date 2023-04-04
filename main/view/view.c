@@ -10,21 +10,14 @@
 #include "lv_page_manager.h"
 
 
-QUEUE_DECLARATION(event_queue, view_event_t, 12);
-QUEUE_DEFINITION(event_queue, view_event_t);
-
-
-static void periodic_timer_callback(lv_timer_t *timer);
-static void free_user_data_callback(lv_event_t *event);
 static void event_callback(lv_event_t *event);
 static void plus_minus_keyboard_cb(lv_event_t *event);
 
 
-static struct event_queue q;
-static page_manager_t     pman;
-static lv_indev_t        *indev;
+static lv_indev_t *indev;
 
 static lv_pman_t page_manager = {0};
+lv_pman_handle_t pman_handle  = &page_manager;
 
 
 void view_init(model_updater_t updater, lv_pman_user_msg_cb_t controller_cb,
@@ -59,100 +52,28 @@ void view_init(model_updater_t updater, lv_pman_user_msg_cb_t controller_cb,
     /*Register the driver in LVGL and save the created input device object*/
     indev = lv_indev_drv_register(&indev_drv);
 
-    pman_init(&pman);
-    event_queue_init(&q);
+    lv_pman_init(&page_manager, updater, indev, controller_cb);
 }
 
 
-pman_view_t view_change_page_extra(model_t *model, const pman_page_t *page, void *extra) {
-    event_queue_init(&q);     // Butta tutti gli eventi precedenti quando cambi la pagina
-    view_event((view_event_t){.code = VIEW_EVENT_CODE_OPEN});
-    lv_indev_reset(indev, NULL);
-    return pman_change_page_extra(&pman, model, *page, extra);
+void view_change_page_extra(model_t *model, const lv_pman_page_t *page, void *extra) {
+    lv_pman_change_page_extra(&page_manager, *page, extra);
+    // event_queue_init(&q);     // Butta tutti gli eventi precedenti quando cambi la pagina
+    // view_event((view_event_t){.code = VIEW_EVENT_CODE_OPEN});
+    // lv_indev_reset(indev, NULL);
+    // return pman_change_page_extra(&pman, model, *page, extra);
 }
 
 
-pman_view_t view_change_page(model_t *model, const pman_page_t *page) {
+void view_change_page(model_t *model, const lv_pman_page_t *page) {
     return view_change_page_extra(model, page, NULL);
 }
 
 
-pman_view_t view_rebase_page(model_t *model, const pman_page_t *page) {
-    event_queue_init(&q);
-    view_event((view_event_t){.code = VIEW_EVENT_CODE_OPEN});
-    lv_indev_reset(indev, NULL);
-    return pman_rebase_page(&pman, model, *(pman_page_t *)page);
-}
-
-
-int view_get_next_msg(model_t *model, view_message_t *msg, view_event_t *eventcopy) {
-    view_event_t event;
-    int          found = 0;
-
-    if (!event_queue_is_empty(&q)) {
-        event_queue_dequeue(&q, &event);
-        found = 1;
-    }
-
-    if (found) {
-        *msg = pman.current_page.process_event(model, pman.current_page.data, event);
-        if (eventcopy)
-            *eventcopy = event;
-    }
-
-    return found;
-}
-
-
-int view_process_msg(view_page_message_t vmsg, model_t *model) {
-    switch (vmsg.code) {
-        case VIEW_PAGE_MESSAGE_CODE_CHANGE_PAGE:
-            view_change_page(model, vmsg.page);
-            break;
-
-        case VIEW_PAGE_MESSAGE_CODE_CHANGE_PAGE_EXTRA:
-            view_change_page_extra(model, vmsg.page, vmsg.extra);
-            break;
-
-        case VIEW_PAGE_MESSAGE_CODE_BACK:
-            pman_back(&pman, model);
-            lv_indev_reset(indev, NULL);
-            event_queue_init(&q);
-            view_event((view_event_t){.code = VIEW_EVENT_CODE_OPEN});
-            break;
-
-        case VIEW_PAGE_MESSAGE_CODE_REBASE:
-            view_rebase_page(model, vmsg.page);
-            break;
-
-        case VIEW_PAGE_MESSAGE_CODE_NOTHING:
-            break;
-    }
-    return 0;
-}
-
 
 void view_event(view_event_t event) {
-    event_queue_enqueue(&q, &event);
-}
-
-
-void view_destroy_all(void *data, void *extra) {
-    free(data);
-    free(extra);
-}
-
-
-void view_close_all(void *data) {
-    (void)data;
-    lv_obj_clean(lv_scr_act());
-}
-
-
-lv_timer_t *view_register_periodic_timer(size_t period, int code) {
-    lv_timer_t *timer = lv_timer_create(periodic_timer_callback, period, (void *)(uintptr_t)code);
-    lv_timer_pause(timer);
-    return timer;
+    // event_queue_enqueue(&q, &event);
+    lv_pman_event(&page_manager, LV_PMAN_USER_EVENT(&event));
 }
 
 
@@ -166,18 +87,18 @@ void view_register_object_default_callback_with_number(lv_obj_t *obj, int id, in
     data->id                 = id;
     data->number             = number;
     lv_obj_set_user_data(obj, data);
-    lv_obj_remove_event_cb(obj, free_user_data_callback);
-    lv_obj_remove_event_cb(obj, event_callback);
-    lv_obj_add_event_cb(obj, free_user_data_callback, LV_EVENT_DELETE, NULL);
-    lv_obj_add_event_cb(obj, event_callback, LV_EVENT_CLICKED, NULL);
-    lv_obj_add_event_cb(obj, event_callback, LV_EVENT_VALUE_CHANGED, NULL);
-    lv_obj_add_event_cb(obj, event_callback, LV_EVENT_RELEASED, NULL);
-    lv_obj_add_event_cb(obj, event_callback, LV_EVENT_PRESSED, NULL);
-    lv_obj_add_event_cb(obj, event_callback, LV_EVENT_PRESSING, NULL);
-    lv_obj_add_event_cb(obj, event_callback, LV_EVENT_LONG_PRESSED, NULL);
-    lv_obj_add_event_cb(obj, event_callback, LV_EVENT_LONG_PRESSED_REPEAT, NULL);
-    lv_obj_add_event_cb(obj, event_callback, LV_EVENT_CANCEL, NULL);
-    lv_obj_add_event_cb(obj, event_callback, LV_EVENT_READY, NULL);
+
+    lv_pman_unregister_obj_event(&page_manager, obj);
+    lv_pman_register_obj_event(&page_manager, obj, LV_EVENT_CLICKED);
+    lv_pman_register_obj_event(&page_manager, obj, LV_EVENT_VALUE_CHANGED);
+    lv_pman_register_obj_event(&page_manager, obj, LV_EVENT_RELEASED);
+    lv_pman_register_obj_event(&page_manager, obj, LV_EVENT_PRESSED);
+    lv_pman_register_obj_event(&page_manager, obj, LV_EVENT_PRESSING);
+    lv_pman_register_obj_event(&page_manager, obj, LV_EVENT_LONG_PRESSED);
+    lv_pman_register_obj_event(&page_manager, obj, LV_EVENT_LONG_PRESSED_REPEAT);
+    lv_pman_register_obj_event(&page_manager, obj, LV_EVENT_CANCEL);
+    lv_pman_register_obj_event(&page_manager, obj, LV_EVENT_READY);
+    lv_pman_set_obj_self_destruct(obj);
 }
 
 
@@ -187,10 +108,9 @@ void view_register_keyboard_plus_minus_callback(lv_obj_t *kb, int id) {
     data->id                 = id;
     data->number             = 0;
     lv_obj_set_user_data(kb, data);
-    lv_obj_remove_event_cb(kb, free_user_data_callback);
     lv_obj_remove_event_cb(kb, event_callback);
     lv_obj_remove_event_cb(kb, lv_keyboard_def_event_cb);
-    lv_obj_add_event_cb(kb, free_user_data_callback, LV_EVENT_DELETE, NULL);
+    lv_pman_set_obj_self_destruct(kb);
     lv_obj_add_event_cb(kb, plus_minus_keyboard_cb, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_add_event_cb(kb, plus_minus_keyboard_cb, LV_EVENT_CANCEL, NULL);
     lv_obj_add_event_cb(kb, plus_minus_keyboard_cb, LV_EVENT_READY, NULL);
@@ -220,15 +140,6 @@ static void plus_minus_keyboard_cb(lv_event_t *event) {
         }
     }
     view_event(myevent);
-}
-
-
-static void free_user_data_callback(lv_event_t *event) {
-    if (lv_event_get_code(event) == LV_EVENT_DELETE) {
-        lv_obj_t           *obj  = lv_event_get_current_target(event);
-        view_object_data_t *data = lv_obj_get_user_data(obj);
-        free(data);
-    }
 }
 
 
@@ -266,10 +177,4 @@ static void event_callback(lv_event_t *event) {
     }
 
     view_event(pman_event);
-}
-
-
-static void periodic_timer_callback(lv_timer_t *timer) {
-    int code = (int)(uintptr_t)timer->user_data;
-    view_event((view_event_t){.code = VIEW_EVENT_CODE_TIMER, .timer_code = code});
 }

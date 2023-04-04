@@ -1,3 +1,4 @@
+#if 0
 #include <stdio.h>
 #include "lvgl.h"
 #include "view/view.h"
@@ -219,3 +220,4 @@ const pman_page_t page_network = {
     .close         = close_page,
     .destroy       = destroy_page,
 };
+#endif

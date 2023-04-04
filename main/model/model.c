@@ -543,8 +543,11 @@ size_t model_get_num_programs(model_t *pmodel) {
 
 const char *model_get_program_name_in_language(model_t *pmodel, uint16_t language, size_t num) {
     assert(pmodel != NULL);
-    assert(num < model_get_num_programs(pmodel));
-    return model_get_program(pmodel, num)->nomi[language];
+    if (num < model_get_num_programs(pmodel)) {
+        return model_get_program(pmodel, num)->nomi[language];
+    } else {
+        return "MISSING";
+    }
 }
 
 

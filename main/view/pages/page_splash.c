@@ -3,31 +3,29 @@
 #include "gel/pagemanager/page_manager.h"
 
 
-static void *create_page(model_t *pmodel, void *extra) {
-    (void)pmodel;
+static void *create_page(lv_pman_handle_t handle, void *extra) {
+    (void)handle;
     (void)extra;
     return NULL;
 }
 
 
-static void open_page(model_t *pmodel, void *arg) {
-    (void)pmodel;
-    (void)arg;
+static void open_page(lv_pman_handle_t handle, void *state) {
+    (void)state;
 
-
-    lv_timer_t *timer = view_register_periodic_timer(500, 0);
-    lv_timer_set_repeat_count(timer, 1);
-    lv_timer_resume(timer);
+    lv_pman_timer_t *timer = LV_PMAN_REGISTER_TIMER_ID(handle, 500, 0);
+    lv_pman_timer_set_repeat_count(timer, 1);
+    lv_pman_timer_resume(timer);
 }
 
 
-static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_t event) {
-    view_message_t msg = VIEW_NULL_MESSAGE;
+static lv_pman_msg_t process_page_event(lv_pman_handle_t handle, void *state, lv_pman_event_t event) {
+    lv_pman_msg_t msg = LV_PMAN_MSG_NULL;
 
-    switch (event.code) {
-        case VIEW_EVENT_CODE_TIMER:
-            msg.vmsg.code = VIEW_PAGE_MESSAGE_CODE_REBASE;
-            msg.vmsg.page = (void *)&page_main;
+    switch (event.tag) {
+        case LV_PMAN_EVENT_TAG_TIMER:
+            msg.vmsg.tag = LV_PMAN_STACK_MSG_TAG_REBASE;
+            msg.vmsg.as.destination.page = (void*)&page_main;
             break;
 
         default:
@@ -39,9 +37,9 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
 
 
 
-const pman_page_t page_splash = {
-    .close         = view_close_all,
-    .destroy       = view_destroy_all,
+const lv_pman_page_t page_splash = {
+    .close         = lv_pman_close_all,
+    .destroy       = lv_pman_destroy_all,
     .process_event = process_page_event,
     .open          = open_page,
     .create        = create_page,

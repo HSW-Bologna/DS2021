@@ -168,7 +168,7 @@ lv_obj_t *view_common_build_param_editor(lv_obj_t *root, lv_obj_t **textarea, mo
     lv_obj_align(btn, LV_ALIGN_BOTTOM_LEFT, 8, -8);
 
     btn = lv_btn_create(cont);
-    view_register_object_default_callback_with_number(btn, default_id, num);
+    view_register_object_default_callback_with_number( btn, default_id, num);
     l = lv_label_create(btn);
     lv_label_set_text(l, view_intl_get_string(pmodel, STRINGS_DEFAULT));
     lv_obj_set_size(btn, 120, 40);
@@ -190,7 +190,7 @@ lv_obj_t *view_common_build_param_editor(lv_obj_t *root, lv_obj_t **textarea, mo
             }
 
             lv_obj_t *list = lv_dropdown_create(cont);
-            view_register_object_default_callback_with_number(list, dd_id, num);
+            view_register_object_default_callback_with_number( list, dd_id, num);
             lv_dropdown_set_options(list, options);
             lv_obj_set_width(list, 240);
             lv_dropdown_set_symbol(list, NULL);
@@ -213,7 +213,7 @@ lv_obj_t *view_common_build_param_editor(lv_obj_t *root, lv_obj_t **textarea, mo
             } else {
                 lv_obj_clear_state(sw, LV_STATE_CHECKED);
             }
-            view_register_object_default_callback(sw, sw_id);
+            view_register_object_default_callback( sw, sw_id);
             lv_obj_set_size(sw, 120, 40);
 
             lv_label_set_long_mode(lbl_description, LV_LABEL_LONG_WRAP);
@@ -243,7 +243,7 @@ lv_obj_t *view_common_build_param_editor(lv_obj_t *root, lv_obj_t **textarea, mo
             lv_obj_align_to(msg, ta, LV_ALIGN_OUT_BOTTOM_MID, 0, 3);
             lv_obj_add_flag(msg, LV_OBJ_FLAG_HIDDEN);
 
-            view_register_object_default_callback(ta, ta_id);
+            view_register_object_default_callback( ta, ta_id);
 
             // clang-format off
             static const char *kbmap[] = {"1", "2", "3", LV_SYMBOL_BACKSPACE, "\n",
@@ -318,8 +318,8 @@ lv_obj_t *view_common_build_param_editor(lv_obj_t *root, lv_obj_t **textarea, mo
             lv_obj_align_to(roller1, lbl_description, LV_ALIGN_OUT_BOTTOM_MID, -45, 32);
             lv_obj_align_to(roller2, lbl_description, LV_ALIGN_OUT_BOTTOM_MID, 45, 32);
 
-            view_register_object_default_callback(roller1, roller1_id);
-            view_register_object_default_callback(roller2, roller2_id);
+            view_register_object_default_callback( roller1, roller1_id);
+            view_register_object_default_callback( roller2, roller2_id);
 
             unsigned int min = parameter_to_long(par) / 60;
             unsigned int sec = parameter_to_long(par) % 60;
@@ -338,7 +338,7 @@ void view_common_roller_set_number(lv_obj_t *roller, int num) {
     memset(string, 0, (cifre + 1) * num);
 
     for (int i = 0; i < num; i++) {
-        char tmp[8] = {0};
+        char tmp[16] = {0};
         if (i == num - 1) {
             snprintf(tmp, sizeof(tmp), "%02i", i);
         } else {
@@ -377,7 +377,7 @@ lv_obj_t *view_common_icon_button(lv_obj_t *parent, char *symbol, int id) {
     lv_label_set_text(lbl, symbol);
     lv_obj_set_size(btn, 64, 64);
     lv_obj_align(lbl, LV_ALIGN_CENTER, 0, 0);
-    view_register_object_default_callback(btn, id);
+    view_register_object_default_callback( btn, id);
 
     return btn;
 }
@@ -471,8 +471,8 @@ lv_obj_t *view_common_create_simple_image_button(lv_obj_t *parent, const lv_img_
 }
 
 
-lv_obj_t *view_common_create_image_button(lv_obj_t *parent, const lv_img_dsc_t *src, const lv_img_dsc_t *src_pressed,
-                                          const lv_img_dsc_t *src_checked, int id) {
+lv_obj_t *view_common_create_image_button(lv_obj_t *parent, const lv_img_dsc_t *src,
+                                          const lv_img_dsc_t *src_pressed, const lv_img_dsc_t *src_checked, int id) {
     lv_obj_t *btn = lv_imgbtn_create(parent);
     lv_imgbtn_set_src(btn, LV_IMGBTN_STATE_RELEASED, NULL, src, NULL);
     lv_imgbtn_set_src(btn, LV_IMGBTN_STATE_PRESSED, NULL, src_pressed, NULL);

@@ -2,12 +2,14 @@
 #include <stdlib.h>
 #include "lvgl.h"
 #include "view/view.h"
+#include "view/view_types.h"
 #include "view/common.h"
 #include "gel/pagemanager/page_manager.h"
 #include "gel/timer/timecheck.h"
 #include "view/widgets/custom_tabview.h"
 #include "view/intl/intl.h"
 #include "model/descriptions/AUTOGEN_FILE_parameters.h"
+#include "model/model_updater.h"
 #include "config/app_conf.h"
 #include "utils/system_time.h"
 #include "view/theme/style.h"
@@ -71,16 +73,17 @@ struct page_data {
     lv_obj_t *password_blanket;
     lv_obj_t *alarm_blanket;
 
-    lv_obj_t   *lbl_step_num;
-    lv_obj_t   *lbl_step_name;
-    lv_obj_t   *lbl_temp;
-    lv_obj_t   *lbl_hum;
-    lv_obj_t   *lbl_status;
-    lv_obj_t   *lbl_program_name;
-    lv_obj_t   *lbl_time;
-    lv_obj_t   *lbl_parametro;
-    lv_timer_t *timer;
-    lv_timer_t *lang_timer;
+    lv_obj_t *lbl_step_num;
+    lv_obj_t *lbl_step_name;
+    lv_obj_t *lbl_temp;
+    lv_obj_t *lbl_hum;
+    lv_obj_t *lbl_status;
+    lv_obj_t *lbl_program_name;
+    lv_obj_t *lbl_time;
+    lv_obj_t *lbl_parametro;
+
+    lv_pman_timer_t *timer;
+    lv_pman_timer_t *lang_timer;
 
     lv_obj_t *btn_menu;
     lv_obj_t *btn_start;
@@ -109,6 +112,8 @@ struct page_data {
     uint16_t          *par_pointer;
     parameter_handle_t par;
     int                checked_menu_button;
+
+    view_controller_message_t cmsg;
 };
 
 
@@ -268,8 +273,10 @@ static void update_program_data(model_t *pmodel, struct page_data *data) {
     lv_label_set_text_fmt(data->lbl_program_name, "%i - %s", data->selected_prog + 1,
                           model_get_program_name_in_language(pmodel, data->language, data->selected_prog));
     lv_img_set_src(data->img_lingua, languages[data->language]);
+    dryer_program_t *prog      = model_get_program(pmodel, data->selected_prog);
+    uint16_t         num_steps = prog == NULL ? 0 : prog->num_steps;
 
-    if (model_get_program(pmodel, data->selected_prog)->num_steps == 0) {
+    if (num_steps == 0) {
         lv_obj_add_state(data->btn_start, LV_STATE_DISABLED);
     } else {
         lv_obj_clear_state(data->btn_start, LV_STATE_DISABLED);
@@ -427,12 +434,11 @@ static void update_state(model_t *pmodel, struct page_data *data) {
 }
 
 
-static void *create_page(model_t *pmodel, void *extra) {
-    (void)pmodel;
+static void *create_page(lv_pman_handle_t handle, void *extra) {
     (void)extra;
     struct page_data *data = malloc(sizeof(struct page_data));
-    data->timer            = view_register_periodic_timer(500, PERIODIC_TIMER_ID);
-    data->lang_timer       = view_register_periodic_timer(LANGUAGE_RESET_DELAY, LANGUAGE_TIMER_ID);
+    data->timer            = LV_PMAN_REGISTER_TIMER_ID(handle, 500, PERIODIC_TIMER_ID);
+    data->lang_timer       = LV_PMAN_REGISTER_TIMER_ID(handle, LANGUAGE_RESET_DELAY, LANGUAGE_TIMER_ID);
     data->selected_prog    = 0;
     data->ignore_ui        = 0;
     data->oldalarm         = -1;
@@ -441,13 +447,16 @@ static void *create_page(model_t *pmodel, void *extra) {
 }
 
 
-static void open_page(model_t *pmodel, void *arg) {
-    struct page_data *data = arg;
+static void open_page(lv_pman_handle_t handle, void *state) {
+    struct page_data *data    = state;
+    model_updater_t   updater = lv_pman_get_user_data(handle);
+    model_t          *pmodel  = (model_t *)model_updater_get(updater);
+
     data->blanket          = NULL;
     data->password_blanket = NULL;
     data->alarm_blanket    = NULL;
     data->language         = model_get_language(pmodel);
-    lv_timer_resume(data->timer);
+    lv_pman_timer_resume(data->timer);
 
     lv_obj_t *background = lv_obj_create(lv_scr_act());
     lv_obj_set_size(background, LV_PCT(100), LV_PCT(100));
@@ -641,65 +650,99 @@ static void open_page(model_t *pmodel, void *arg) {
 }
 
 
-static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_t event) {
-    view_message_t    msg  = VIEW_NULL_MESSAGE;
-    struct page_data *data = arg;
+static lv_pman_msg_t process_page_event(lv_pman_handle_t handle, void *state, lv_pman_event_t event) {
+    lv_pman_msg_t     msg     = LV_PMAN_MSG_NULL;
+    struct page_data *data    = state;
+    model_updater_t   updater = lv_pman_get_user_data(handle);
+    model_t          *pmodel  = (model_t *)model_updater_get(updater);
 
-    switch (event.code) {
-        case VIEW_EVENT_CODE_SENSORS_CHANGED:
-            update_sensors(pmodel, data);
+    data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_NOTHING;
+    msg.user_msg = &data->cmsg;
+
+    switch (event.tag) {
+        case LV_PMAN_EVENT_TAG_USER: {
+            view_event_t *user_event = event.as.user;
+
+            switch (user_event->code) {
+                case VIEW_EVENT_CODE_SENSORS_CHANGED:
+                    update_sensors(pmodel, data);
+                    break;
+
+                case VIEW_EVENT_CODE_STATE_SYNCED:
+                    data->selected_prog = model_get_current_program_number(pmodel);
+                    update_program_data(pmodel, data);
+                    update_state(pmodel, data);
+                    break;
+
+                case VIEW_EVENT_CODE_STATE_CHANGED:
+                    update_state(pmodel, data);
+                    update_alarm_popup(pmodel, data, 0);
+                    break;
+
+                case VIEW_EVENT_CODE_ALARM:
+                    if (!model_is_machine_communication_ok(pmodel) && data->blanket == NULL) {
+                        lv_obj_t *popup = view_common_create_choice_popup(
+                            lv_scr_act(), 1,
+                            view_intl_get_string_in_language(data->language, STRINGS_ERRORE_DI_COMUNICAZIONE),
+                            view_intl_get_string_in_language(data->language, STRINGS_RIPROVA), RETRY_COMM_BTN_ID,
+                            view_intl_get_string_in_language(data->language, STRINGS_DISABILITA), DISABLE_COMM_BTN_ID);
+                        data->blanket = lv_obj_get_parent(popup);
+                    } else if (data->blanket != NULL) {
+                        lv_obj_del(data->blanket);
+                        data->blanket = NULL;
+                    }
+                    break;
+
+                default:
+                    break;
+            }
             break;
+        }
 
-        case VIEW_EVENT_CODE_STATE_SYNCED:
-            data->selected_prog = model_get_current_program_number(pmodel);
-            update_program_data(pmodel, data);
-            update_state(pmodel, data);
-            break;
+        case LV_PMAN_EVENT_TAG_TIMER: {
+            int timer_id = (int)(uintptr_t)lv_pman_timer_get_user_data(event.as.timer);
 
-        case VIEW_EVENT_CODE_STATE_CHANGED:
-            update_state(pmodel, data);
-            update_alarm_popup(pmodel, data, 0);
-            break;
-
-        case VIEW_EVENT_CODE_TIMER:
-            switch (event.timer_code) {
+            switch (timer_id) {
                 case PERIODIC_TIMER_ID:
                     update_time(pmodel, data);
                     update_alarm_popup(pmodel, data, 0);
                     if (model_get_machine_state(pmodel) != MACHINE_STATE_STOPPED) {
-                        lv_timer_reset(data->lang_timer);
+                        lv_pman_timer_reset(data->lang_timer);
                     }
                     break;
 
                 case LANGUAGE_TIMER_ID:
                     data->language = model_get_language(pmodel);
-                    lv_timer_reset(data->lang_timer);
-                    lv_timer_pause(data->lang_timer);
+                    lv_pman_timer_reset(data->lang_timer);
+                    lv_pman_timer_pause(data->lang_timer);
                     update_program_data(pmodel, data);
                     update_state(pmodel, data);
                     break;
             }
             break;
+        }
 
-        case VIEW_EVENT_CODE_LVGL: {
+        case LV_PMAN_EVENT_TAG_LVGL: {
+            view_object_data_t *objdata = lv_obj_get_user_data(lv_event_get_target(event.as.lvgl));
+
             if (data->ignore_ui) {
-                if (event.event == LV_EVENT_RELEASED) {
+                if (lv_event_get_code(event.as.lvgl) == LV_EVENT_RELEASED) {
                     data->ignore_ui = 0;
                 }
-            } else if (event.event == LV_EVENT_CLICKED) {
-                switch (event.data.id) {
+            } else if (lv_event_get_code(event.as.lvgl) == LV_EVENT_CLICKED) {
+                switch (objdata->id) {
                     case PAR_PLUS_BTN_ID:
                         parameter_operator(&data->par, +1);
                         update_menu_parameter(data);
-                        msg.cmsg.code           = parameter_change_code(data);
-                        msg.cmsg.register_value = *data->par_pointer;
+                        data->cmsg.code           = parameter_change_code(data);
+                        data->cmsg.register_value = *data->par_pointer;
                         break;
 
                     case PAR_MINUS_BTN_ID:
                         parameter_operator(&data->par, -1);
                         update_menu_parameter(data);
-                        msg.cmsg.code           = parameter_change_code(data);
-                        msg.cmsg.register_value = *data->par_pointer;
+                        data->cmsg.code           = parameter_change_code(data);
+                        data->cmsg.register_value = *data->par_pointer;
                         break;
 
                     case MENU_BTN_ID:
@@ -717,7 +760,7 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                             lv_obj_del(data->alarm_blanket);
                             data->alarm_blanket = NULL;
                         }
-                        msg.cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_CLEAR_ALARMS;
+                        data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_CLEAR_ALARMS;
                         break;
 
                     case BLANKET_ID:
@@ -731,8 +774,8 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                         data->language = (data->language + 1) % NUM_LINGUE;
                         update_program_data(pmodel, data);
                         update_state(pmodel, data);
-                        lv_timer_reset(data->lang_timer);
-                        lv_timer_resume(data->lang_timer);
+                        lv_pman_timer_reset(data->lang_timer);
+                        lv_pman_timer_resume(data->lang_timer);
                         break;
                     }
 
@@ -759,14 +802,14 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                                 view_common_create_password_popup(lv_scr_act(), PASSWORD_KEYBOARD_ID, 1);
                             view_register_object_default_callback(data->password_blanket, BLANKET_ID);
                         } else {
-                            msg.vmsg.code = VIEW_PAGE_MESSAGE_CODE_CHANGE_PAGE;
-                            msg.vmsg.page = (void *)&page_settings;
+                            msg.vmsg.tag                 = LV_PMAN_STACK_MSG_TAG_CHANGE_PAGE;
+                            msg.vmsg.as.destination.page = (void *)&page_settings;
                         }
                         break;
                     }
 
                     case RETRY_COMM_BTN_ID:
-                        msg.cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_TOGGLE_COMMUNICATION;
+                        data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_TOGGLE_COMMUNICATION;
                         break;
 
                     case DISABLE_COMM_BTN_ID:
@@ -779,8 +822,8 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                         if (model_is_any_alarm_active(pmodel)) {
                             update_alarm_popup(pmodel, data, 1);
                         } else {
-                            msg.cmsg.code    = VIEW_CONTROLLER_MESSAGE_CODE_START_PROGRAM;
-                            msg.cmsg.program = data->selected_prog;
+                            data->cmsg.code    = VIEW_CONTROLLER_MESSAGE_CODE_START_PROGRAM;
+                            data->cmsg.program = data->selected_prog;
                         }
                         break;
 
@@ -790,37 +833,37 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                     case PAUSE_BTN_ID:
                         break;
                 }
-            } else if (event.event == LV_EVENT_RELEASED) {
-                switch (event.data.id) {
+            } else if (lv_event_get_code(event.as.lvgl) == LV_EVENT_RELEASED) {
+                switch (objdata->id) {
                     case PAR_TIME_BTN_ID:
                     case PAR_SPEED_BTN_ID:
                     case PAR_HUMIDITY_BTN_ID:
                     case PAR_TEMP_BTN_ID:
-                        update_menu(pmodel, data, event.data.id);
+                        update_menu(pmodel, data, objdata->id);
                         break;
 
                     case PAR_MINUS_BTN_ID:
                     case PAR_PLUS_BTN_ID:
                         if (data->par_pointer != NULL) {
-                            msg.cmsg.code           = parameter_change_code(data);
-                            msg.cmsg.register_value = *data->par_pointer;
+                            data->cmsg.code           = parameter_change_code(data);
+                            data->cmsg.register_value = *data->par_pointer;
                         }
                         break;
                 }
-            } else if (event.event == LV_EVENT_PRESSED) {
-                switch (event.data.id) {
+            } else if (lv_event_get_code(event.as.lvgl) == LV_EVENT_PRESSED) {
+                switch (objdata->id) {
                     case STOP_BTN_ID:
                     case PAUSE_BTN_ID:
                         data->press_timestamp = get_millis();
                         break;
                 }
-            } else if (event.event == LV_EVENT_PRESSING) {
-                switch (event.data.id) {
+            } else if (lv_event_get_code(event.as.lvgl) == LV_EVENT_PRESSING) {
+                switch (objdata->id) {
                     case STOP_BTN_ID:
                         if (is_expired(data->press_timestamp, get_millis(),
                                        model_get_stop_press_time(pmodel) * 1000UL) &&
                             !data->ignore_ui) {
-                            msg.cmsg.code   = VIEW_CONTROLLER_MESSAGE_CODE_STOP_MACHINE;
+                            data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_STOP_MACHINE;
                             data->ignore_ui = 1;
                         }
                         break;
@@ -829,13 +872,13 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                         if (is_expired(data->press_timestamp, get_millis(),
                                        model_get_pause_press_time(pmodel) * 1000UL) &&
                             !data->ignore_ui) {
-                            msg.cmsg.code   = VIEW_CONTROLLER_MESSAGE_CODE_PAUSE_MACHINE;
+                            data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_PAUSE_MACHINE;
                             data->ignore_ui = 1;
                         }
                         break;
                 }
-            } else if (event.event == LV_EVENT_LONG_PRESSED_REPEAT) {
-                switch (event.data.id) {
+            } else if (lv_event_get_code(event.as.lvgl) == LV_EVENT_LONG_PRESSED_REPEAT) {
+                switch (objdata->id) {
                     case PAR_PLUS_BTN_ID:
                         parameter_operator(&data->par, +1);
                         update_menu_parameter(data);
@@ -846,8 +889,8 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                         update_menu_parameter(data);
                         break;
                 }
-            } else if (event.event == LV_EVENT_CANCEL) {
-                switch (event.data.id) {
+            } else if (lv_event_get_code(event.as.lvgl) == LV_EVENT_CANCEL) {
+                switch (objdata->id) {
                     case PASSWORD_KEYBOARD_ID:
                         if (data->blanket != NULL) {
                             lv_obj_del(data->blanket);
@@ -855,13 +898,16 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                         }
                         break;
                 }
-            } else if (event.event == LV_EVENT_READY) {
-                switch (event.data.id) {
+            } else if (lv_event_get_code(event.as.lvgl) == LV_EVENT_READY) {
+                switch (objdata->id) {
                     case PASSWORD_KEYBOARD_ID: {
-                        if (strcmp(event.string_value, model_get_password(pmodel)) == 0 ||
-                            strcmp(event.string_value, SKELETON_KEY) == 0) {
-                            msg.vmsg.code = VIEW_PAGE_MESSAGE_CODE_CHANGE_PAGE;
-                            msg.vmsg.page = (void *)&page_settings;
+                        lv_obj_t   *kb   = lv_event_get_target(event.as.lvgl);
+                        lv_obj_t   *ta   = lv_keyboard_get_textarea(kb);
+                        const char *text = lv_textarea_get_text(ta);
+
+                        if (strcmp(text, model_get_password(pmodel)) == 0 || strcmp(text, SKELETON_KEY) == 0) {
+                            msg.vmsg.tag                 = LV_PMAN_STACK_MSG_TAG_CHANGE_PAGE;
+                            msg.vmsg.as.destination.page = (void *)&page_settings;
                         } else {
                             view_common_toast(
                                 view_intl_get_string_in_language(data->language, STRINGS_PASSWORD_ERRATA));
@@ -878,20 +924,6 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
             break;
         }
 
-        case VIEW_EVENT_CODE_OPEN:
-        case VIEW_EVENT_CODE_ALARM:
-            if (!model_is_machine_communication_ok(pmodel) && data->blanket == NULL) {
-                lv_obj_t *popup = view_common_create_choice_popup(
-                    lv_scr_act(), 1, view_intl_get_string_in_language(data->language, STRINGS_ERRORE_DI_COMUNICAZIONE),
-                    view_intl_get_string_in_language(data->language, STRINGS_RIPROVA), RETRY_COMM_BTN_ID,
-                    view_intl_get_string_in_language(data->language, STRINGS_DISABILITA), DISABLE_COMM_BTN_ID);
-                data->blanket = lv_obj_get_parent(popup);
-            } else if (data->blanket != NULL) {
-                lv_obj_del(data->blanket);
-                data->blanket = NULL;
-            }
-            break;
-
         default:
             break;
     }
@@ -900,24 +932,24 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
 }
 
 
-static void destroy_page(void *arg, void *extra) {
-    struct page_data *data = arg;
-    lv_timer_del(data->timer);
-    lv_timer_del(data->lang_timer);
-    free(data);
-    free(extra);
+static void destroy_page(void *state, void *extra) {
+    (void)extra;
+    struct page_data *pdata = state;
+    lv_pman_timer_delete(pdata->timer);
+    lv_pman_timer_delete(pdata->lang_timer);
+    lv_mem_free(pdata);
 }
 
 
-static void close_page(void *arg) {
-    struct page_data *data = arg;
-    lv_timer_pause(data->timer);
-    lv_timer_reset(data->lang_timer);
-    lv_timer_pause(data->lang_timer);
+static void close_page(void *state) {
+    struct page_data *pdata = state;
+    lv_pman_timer_pause(pdata->timer);
+    lv_pman_timer_reset(pdata->lang_timer);
+    lv_pman_timer_pause(pdata->lang_timer);
     lv_obj_clean(lv_scr_act());
 }
 
-const pman_page_t page_main = {
+const lv_pman_page_t page_main = {
     .create        = create_page,
     .close         = close_page,
     .destroy       = destroy_page,

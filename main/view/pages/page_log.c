@@ -1,3 +1,4 @@
+#if 0
 #include <stdlib.h>
 #include "lvgl.h"
 #include "view/view.h"
@@ -76,3 +77,4 @@ const pman_page_t page_log = {
     .destroy       = view_destroy_all,
     .process_event = process_page_event,
 };
+#endif

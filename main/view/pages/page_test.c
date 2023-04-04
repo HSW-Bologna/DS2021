@@ -1,3 +1,4 @@
+#if 0
 #include <stdio.h>
 #include <stdlib.h>
 #include "lvgl.h"
@@ -332,3 +333,4 @@ const pman_page_t page_test = {
     .process_event = process_page_event,
     .open          = open_page,
 };
+#endif

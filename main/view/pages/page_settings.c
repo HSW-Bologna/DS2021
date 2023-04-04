@@ -83,6 +83,8 @@ struct page_data {
     lv_obj_t *password_blanket;
     size_t    waiting_io;
     size_t    selected_tab;
+    
+    view_controller_message_t cmsg;
 };
 
 
@@ -132,13 +134,13 @@ static size_t num_of_io_operations_to_wait(model_t *pmodel, struct page_data *da
 }
 
 
-static void *create_page(model_t *pmodel, void *extra) {
-    (void)pmodel;
+static void *create_page(lv_pman_handle_t handle, void *extra) {
+    (void)handle;
     (void)extra;
-    struct page_data *data = (struct page_data *)malloc(sizeof(struct page_data));
-    memset(data, 0, sizeof(struct page_data));
+    struct page_data *pdata = (struct page_data *)malloc(sizeof(struct page_data));
+    memset(pdata, 0, sizeof(struct page_data));
 
-    return data;
+    return pdata;
 }
 
 
@@ -381,9 +383,10 @@ static void create_tab_test(lv_obj_t *tab, model_t *pmodel, struct page_data *da
 }
 
 
-static void open_page(model_t *pmodel, void *arg) {
-    (void)pmodel;
-    struct page_data *data = arg;
+static void open_page(lv_pman_handle_t handle, void *state) {
+    model_updater_t   updater = lv_pman_get_user_data(handle);
+    model_t          *pmodel  = (model_t *)model_updater_get(updater);
+    struct page_data *data    = state;
 
     data->prog.keyboard_blanket = NULL;
 
@@ -413,48 +416,64 @@ static void open_page(model_t *pmodel, void *arg) {
 }
 
 
-static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_t event) {
-    view_message_t    msg  = VIEW_NULL_MESSAGE;
-    struct page_data *data = arg;
+static lv_pman_msg_t process_page_event(lv_pman_handle_t handle, void *state, lv_pman_event_t event) {
+    lv_pman_msg_t     msg     = LV_PMAN_MSG_NULL;
+    struct page_data *data = state;
+    model_updater_t updater= lv_pman_get_user_data(handle);
+    model_t *pmodel = (model_t *)model_updater_get(updater);
 
-    switch (event.code) {
-        case VIEW_EVENT_CODE_DRIVE:
-            update_drive_btn(data, pmodel);
-            break;
+    data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_NOTHING;
+    msg.user_msg = &data->cmsg;
 
-        case VIEW_EVENT_CODE_ALARM:
-            update_test_btn(pmodel, data);
-            break;
+    switch (event.tag) {
+        case LV_PMAN_EVENT_TAG_USER: {
+            view_event_t *user_event = event.as.user;
+            switch (user_event->code) {
+                case VIEW_EVENT_CODE_DRIVE:
+                    update_drive_btn(data, pmodel);
+                    break;
 
-        case VIEW_EVENT_CODE_OPEN:
-        case VIEW_EVENT_CODE_STATE_CHANGED:
-            if (model_is_in_test(pmodel)) {
-                msg.vmsg.code = VIEW_PAGE_MESSAGE_CODE_CHANGE_PAGE;
-                msg.vmsg.page = (void *)&page_test;
+                case VIEW_EVENT_CODE_ALARM:
+                    update_test_btn(pmodel, data);
+                    break;
+
+                case VIEW_EVENT_CODE_OPEN:
+                case VIEW_EVENT_CODE_STATE_CHANGED:
+                    if (model_is_in_test(pmodel)) {
+                        //msg.vmsg.tag = LV_PMAN_STACK_MSG_TAG_CHANGE_PAGE;
+                        //msg.vmsg.as.destination.page = (void *)&page_test;
+                    }
+                    break;
+
+                case VIEW_EVENT_CODE_IO_DONE:
+                    if (user_event->io_op == SAVE_ALL_IO_ID) {
+                        if (user_event->error) {
+                            view_common_io_error_toast(pmodel);
+                            msg.vmsg.tag = LV_PMAN_STACK_MSG_TAG_BACK;
+                        } else if (--data->waiting_io == 0) {
+                            msg.vmsg.tag = LV_PMAN_STACK_MSG_TAG_BACK;
+                        }
+                    } else {
+                        if (user_event->error) {
+                            view_common_io_error_toast(pmodel);
+                        }
+                        //msg.vmsg.tag  = LV_PMAN_STACK_MSG_TAG_CHANGE_PAGE_EXTRA;
+                        //msg.vmsg.as.destination.extra = user_event->io_data;
+                        //msg.vmsg.as.destination.page  = (void *)&page_log;
+                    }
+                    break;
+                default:
+                    break;
             }
             break;
+        }
 
-        case VIEW_EVENT_CODE_IO_DONE:
-            if (event.io_op == SAVE_ALL_IO_ID) {
-                if (event.error) {
-                    view_common_io_error_toast(pmodel);
-                    msg.vmsg.code = VIEW_PAGE_MESSAGE_CODE_BACK;
-                } else if (--data->waiting_io == 0) {
-                    msg.vmsg.code = VIEW_PAGE_MESSAGE_CODE_BACK;
-                }
-            } else {
-                if (event.error) {
-                    view_common_io_error_toast(pmodel);
-                }
-                msg.vmsg.code  = VIEW_PAGE_MESSAGE_CODE_CHANGE_PAGE_EXTRA;
-                msg.vmsg.extra = event.io_data;
-                msg.vmsg.page  = (void *)&page_log;
-            }
-            break;
+        case LV_PMAN_EVENT_TAG_LVGL: {
+            lv_obj_t *target = lv_event_get_current_target(event.as.lvgl);
+            view_object_data_t *objdata = lv_obj_get_user_data(target);
 
-        case VIEW_EVENT_CODE_LVGL: {
-            if (event.event == LV_EVENT_CLICKED) {
-                switch (event.data.id) {
+            if (lv_event_get_code(event.as.lvgl) == LV_EVENT_CLICKED) {
+                switch (objdata->id) {
                     case BLANKET_ID:
                         if (data->password_blanket) {
                             lv_obj_del(data->password_blanket);
@@ -463,13 +482,13 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                         break;
 
                     case STATS_BTN_ID:
-                        msg.vmsg.code = VIEW_PAGE_MESSAGE_CODE_CHANGE_PAGE;
-                        msg.vmsg.page = (void *)&page_stats;
+                        //msg.vmsg.tag = LV_PMAN_STACK_MSG_TAG_CHANGE_PAGE;
+                        //msg.vmsg.as.destination.page = (void *)&page_stats;
                         break;
 
                     case SETTINGS_BTN_ID:
-                        msg.vmsg.code = VIEW_PAGE_MESSAGE_CODE_CHANGE_PAGE;
-                        msg.vmsg.page = (void *)&page_tech_settings;
+                        //msg.vmsg.tag = LV_PMAN_STACK_MSG_TAG_CHANGE_PAGE;
+                        //msg.vmsg.as.destination.page = (void *)&page_tech_settings;
                         break;
 
                     case PASSWORD_ID:
@@ -482,22 +501,22 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                         break;
 
                     case NETWORK_BTN_ID:
-                        msg.vmsg.code = VIEW_PAGE_MESSAGE_CODE_CHANGE_PAGE;
-                        msg.vmsg.page = (void *)&page_network;
+                        //msg.vmsg.tag = LV_PMAN_STACK_MSG_TAG_CHANGE_PAGE;
+                        //msg.vmsg.as.destination.page = (void *)&page_network;
                         break;
 
                     case LOG_BTN_ID:
-                        msg.cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_READ_LOG_FILE;
+                        data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_READ_LOG_FILE;
                         data->blanket = view_common_create_blanket(lv_scr_act());
                         break;
 
                     case DRIVE_BTN_ID:
-                        msg.vmsg.code = VIEW_PAGE_MESSAGE_CODE_CHANGE_PAGE;
-                        msg.vmsg.page = (void *)&page_drive;
+                        //msg.vmsg.tag = LV_PMAN_STACK_MSG_TAG_CHANGE_PAGE;
+                        //msg.vmsg.as.destination.page = (void *)&page_drive;
                         break;
 
                     case PARAMETER_KB_ID:
-                        parameter_operator(&data->parmac.par, event.data.number);
+                        parameter_operator(&data->parmac.par, objdata->number);
                         if (data->parmac.textarea != NULL) {
                             char string[64] = {0};
                             snprintf(string, sizeof(string), "%li", parameter_to_long(&data->parmac.par));
@@ -506,13 +525,13 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                         break;
 
                     case PROGRAM_BTN_ID:
-                        data->prog.selected_prog = event.data.number;
+                        data->prog.selected_prog = objdata->number;
                         view_common_select_btn_in_list(data->prog.list, data->prog.selected_prog);
                         lv_btnmatrix_clear_btn_ctrl_all(data->prog.btnmx, LV_BTNMATRIX_CTRL_DISABLED);
                         break;
 
                     case TEST_BTN_ID:
-                        msg.cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_ENTER_TEST;
+                        data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_ENTER_TEST;
                         break;
 
                     case ADD_PROG_BTN_ID: {
@@ -527,16 +546,16 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                         if (tosave > 0) {
                             data->waiting_io = tosave;
 
-                            msg.cmsg.code           = VIEW_CONTROLLER_MESSAGE_CODE_SAVE_ALL;
-                            msg.cmsg.parmac         = model_get_parmac_to_save(pmodel);
-                            msg.cmsg.index          = data->prog.index_to_save;
-                            msg.cmsg.password       = data->user.tosave;
-                            msg.cmsg.programs       = model_get_programs_to_save(pmodel);
-                            msg.cmsg.save_all_io_op = SAVE_ALL_IO_ID;
+                            data->cmsg.code           = VIEW_CONTROLLER_MESSAGE_CODE_SAVE_ALL;
+                            data->cmsg.parmac         = model_get_parmac_to_save(pmodel);
+                            data->cmsg.index          = data->prog.index_to_save;
+                            data->cmsg.password       = data->user.tosave;
+                            data->cmsg.programs       = model_get_programs_to_save(pmodel);
+                            data->cmsg.save_all_io_op = SAVE_ALL_IO_ID;
                             model_clear_marks_to_save(pmodel);
                             data->blanket = view_common_create_blanket(lv_scr_act());
                         } else {
-                            msg.vmsg.code = VIEW_PAGE_MESSAGE_CODE_BACK;
+                            msg.vmsg.tag = LV_PMAN_STACK_MSG_TAG_BACK;
                         }
                         break;
                     }
@@ -566,7 +585,7 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                             lv_obj_del(data->parmac.editor);
                             data->parmac.editor = NULL;
                         }
-                        model_parameter_set_value(parmac_get_handle(pmodel, event.data.number),
+                        model_parameter_set_value(parmac_get_handle(pmodel, objdata->number),
                                                   parameter_to_long(&data->parmac.par));
                         update_param_list(data, pmodel);
                         model_mark_parmac_to_save(pmodel);
@@ -576,10 +595,10 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                         if (data->parmac.editor != NULL) {
                             lv_obj_del(data->parmac.editor);
                         }
-                        view_common_select_btn_in_list(data->parmac.list, event.data.number);
-                        parameter_clone(&data->parmac.par, parmac_get_handle(pmodel, event.data.number),
+                        view_common_select_btn_in_list(data->parmac.list, objdata->number);
+                        parameter_clone(&data->parmac.par, parmac_get_handle(pmodel, objdata->number),
                                         (void *)&data->parmac.par_buffer);
-                        data->parmac.num = event.data.number;
+                        data->parmac.num = objdata->number;
 
                         data->parmac.editor = view_common_build_param_editor(
                             data->parmac.tab, &data->parmac.textarea, pmodel, &data->parmac.par, data->parmac.num,
@@ -589,10 +608,10 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                         break;
                     }
                 }
-            } else if (event.event == LV_EVENT_VALUE_CHANGED) {
-                switch (event.data.id) {
+            } else if (lv_event_get_code(event.as.lvgl) == LV_EVENT_VALUE_CHANGED) {
+                switch (objdata->id) {
                     case PROGRAM_BTNMATRIX_ID: {
-                        switch (event.value) {
+                        switch (lv_btnmatrix_get_selected_btn(target)) {
                             case PROG_BTNMX_UP:
                                 if (data->prog.selected_prog > 0) {
                                     model_swap_programs(pmodel, data->prog.selected_prog, data->prog.selected_prog - 1);
@@ -613,18 +632,18 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                                 break;
 
                             case PROG_BTNMX_CONFIRM:
-                                msg.vmsg.code  = VIEW_PAGE_MESSAGE_CODE_CHANGE_PAGE_EXTRA;
-                                msg.vmsg.extra = (void *)(uintptr_t)data->prog.selected_prog;
-                                msg.vmsg.page  = (void *)&page_program;
+                                //msg.vmsg.tag  = LV_PMAN_STACK_MSG_TAG_CHANGE_PAGE_EXTRA;
+                                //msg.vmsg.as.destination.extra = (void *)(uintptr_t)data->prog.selected_prog;
+                                //msg.vmsg.as.destination.page  = (void *)&page_program;
                                 break;
 
                             case PROG_BTNMX_REMOVE:
                                 if (data->prog.selected_prog >= 0) {
-                                    msg.cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_REMOVE_PROGRAM;
-                                    strncpy(msg.cmsg.name,
+                                    data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_REMOVE_PROGRAM;
+                                    strncpy(data->cmsg.name,
                                             model_get_program(pmodel, data->prog.selected_prog)->filename,
-                                            sizeof(msg.cmsg.name));
-                                    msg.cmsg.name[sizeof(msg.cmsg.name) - 1] = '\0';
+                                            sizeof(data->cmsg.name));
+                                    data->cmsg.name[sizeof(data->cmsg.name) - 1] = '\0';
 
                                     model_remove_program(pmodel, data->prog.selected_prog);
 
@@ -655,36 +674,41 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                     }
 
                     case TABVIEW_ID:
-                        data->selected_tab = event.value;
+                        data->selected_tab = lv_tabview_get_tab_act(target);
                         break;
 
                     case PARAMETER_TA_ID:
-                        model_parameter_set_value(&data->parmac.par, atoi(event.string_value));
+                        model_parameter_set_value(&data->parmac.par, atoi(lv_textarea_get_text(target)));
                         break;
 
                     case PARAMETER_ROLLER1_ID:
                         model_parameter_set_value(
                             &data->parmac.par,
-                            (uint16_t)((parameter_to_long(&data->parmac.par) % 60) + event.value * 60));
+                            (uint16_t)((parameter_to_long(&data->parmac.par) % 60) + lv_roller_get_selected(target) * 60));
                         break;
 
                     case PARAMETER_ROLLER2_ID: {
                         uint16_t value = (uint16_t)parameter_to_long(&data->parmac.par);
-                        model_parameter_set_value(&data->parmac.par, (uint16_t)(value - (value % 60) + event.value));
+                        model_parameter_set_value(&data->parmac.par, (uint16_t)(value - (value % 60) + lv_roller_get_selected(target)));
                         break;
                     }
 
                     case PARAMETER_DROPDOWN_ID:
+                        model_parameter_set_value(&data->parmac.par, (uint16_t)lv_dropdown_get_selected(target));
+                        break;
+
                     case PARAMETER_SWITCH_ID:
-                        model_parameter_set_value(&data->parmac.par, (uint16_t)event.value);
+                        model_parameter_set_value(&data->parmac.par, (uint16_t)lv_obj_has_state(target, LV_STATE_CHECKED));
                         break;
                 }
-            } else if (event.event == LV_EVENT_READY) {
-                switch (event.data.id) {
+            } else if (lv_event_get_code(event.as.lvgl) == LV_EVENT_READY) {
+                switch (objdata->id) {
                     case KEYBOARD_ID: {
+                        lv_obj_t *ta = lv_keyboard_get_textarea(target);
+
                         size_t           p_index = 0;
                         dryer_program_t *p       = model_create_new_program(
-                                  pmodel, event.string_value, model_get_language(pmodel), get_millis(), &p_index);
+                            pmodel, lv_textarea_get_text(ta), model_get_language(pmodel), get_millis(), &p_index);
                         if (p) {
                             data->prog.index_to_save = 1;
                             model_mark_program_to_save(pmodel, p_index);
@@ -699,8 +723,10 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                     }
 
                     case PASSWORD_KEYBOARD_ID:
+                        lv_obj_t *ta = lv_keyboard_get_textarea(target);
+
                         data->user.tosave = 1;
-                        model_set_password(pmodel, event.string_value);
+                        model_set_password(pmodel, lv_textarea_get_text(ta));
                         update_password(data, pmodel);
                         if (data->password_blanket != NULL) {
                             lv_obj_del(data->password_blanket);
@@ -708,8 +734,8 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                         }
                         break;
                 }
-            } else if (event.event == LV_EVENT_CANCEL) {
-                switch (event.data.id) {
+            } else if (lv_event_get_code(event.as.lvgl) == LV_EVENT_CANCEL) {
+                switch (objdata->id) {
                     case KEYBOARD_ID: {
                         if (data->prog.keyboard_blanket != NULL) {
                             lv_obj_del(data->prog.keyboard_blanket);
@@ -738,10 +764,10 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
 
 
 
-const pman_page_t page_settings = {
+const lv_pman_page_t page_settings = {
     .create        = create_page,
-    .close         = view_close_all,
-    .destroy       = view_destroy_all,
+    .close         = lv_pman_close_all,
+    .destroy       = lv_pman_destroy_all,
     .process_event = process_page_event,
     .open          = open_page,
 };
