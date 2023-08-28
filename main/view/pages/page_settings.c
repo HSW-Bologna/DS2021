@@ -83,7 +83,7 @@ struct page_data {
     lv_obj_t *password_blanket;
     size_t    waiting_io;
     size_t    selected_tab;
-    
+
     view_controller_message_t cmsg;
 };
 
@@ -134,7 +134,7 @@ static size_t num_of_io_operations_to_wait(model_t *pmodel, struct page_data *da
 }
 
 
-static void *create_page(lv_pman_handle_t handle, void *extra) {
+static void *create_page(pman_handle_t handle, void *extra) {
     (void)handle;
     (void)extra;
     struct page_data *pdata = (struct page_data *)malloc(sizeof(struct page_data));
@@ -383,8 +383,8 @@ static void create_tab_test(lv_obj_t *tab, model_t *pmodel, struct page_data *da
 }
 
 
-static void open_page(lv_pman_handle_t handle, void *state) {
-    model_updater_t   updater = lv_pman_get_user_data(handle);
+static void open_page(pman_handle_t handle, void *state) {
+    model_updater_t   updater = pman_get_user_data(handle);
     model_t          *pmodel  = (model_t *)model_updater_get(updater);
     struct page_data *data    = state;
 
@@ -416,17 +416,17 @@ static void open_page(lv_pman_handle_t handle, void *state) {
 }
 
 
-static lv_pman_msg_t process_page_event(lv_pman_handle_t handle, void *state, lv_pman_event_t event) {
-    lv_pman_msg_t     msg     = LV_PMAN_MSG_NULL;
-    struct page_data *data = state;
-    model_updater_t updater= lv_pman_get_user_data(handle);
-    model_t *pmodel = (model_t *)model_updater_get(updater);
+static pman_msg_t process_page_event(pman_handle_t handle, void *state, pman_event_t event) {
+    pman_msg_t     msg     = PMAN_MSG_NULL;
+    struct page_data *data    = state;
+    model_updater_t   updater = pman_get_user_data(handle);
+    model_t          *pmodel  = (model_t *)model_updater_get(updater);
 
     data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_NOTHING;
-    msg.user_msg = &data->cmsg;
+    msg.user_msg    = &data->cmsg;
 
     switch (event.tag) {
-        case LV_PMAN_EVENT_TAG_USER: {
+        case PMAN_EVENT_TAG_USER: {
             view_event_t *user_event = event.as.user;
             switch (user_event->code) {
                 case VIEW_EVENT_CODE_DRIVE:
@@ -440,8 +440,8 @@ static lv_pman_msg_t process_page_event(lv_pman_handle_t handle, void *state, lv
                 case VIEW_EVENT_CODE_OPEN:
                 case VIEW_EVENT_CODE_STATE_CHANGED:
                     if (model_is_in_test(pmodel)) {
-                        //msg.vmsg.tag = LV_PMAN_STACK_MSG_TAG_CHANGE_PAGE;
-                        //msg.vmsg.as.destination.page = (void *)&page_test;
+                        msg.stack_msg.tag                 = PMAN_STACK_MSG_TAG_CHANGE_PAGE;
+                        msg.stack_msg.as.destination.page = (void *)&page_test;
                     }
                     break;
 
@@ -449,17 +449,17 @@ static lv_pman_msg_t process_page_event(lv_pman_handle_t handle, void *state, lv
                     if (user_event->io_op == SAVE_ALL_IO_ID) {
                         if (user_event->error) {
                             view_common_io_error_toast(pmodel);
-                            msg.vmsg.tag = LV_PMAN_STACK_MSG_TAG_BACK;
+                            msg.stack_msg.tag = PMAN_STACK_MSG_TAG_BACK;
                         } else if (--data->waiting_io == 0) {
-                            msg.vmsg.tag = LV_PMAN_STACK_MSG_TAG_BACK;
+                            msg.stack_msg.tag = PMAN_STACK_MSG_TAG_BACK;
                         }
                     } else {
                         if (user_event->error) {
                             view_common_io_error_toast(pmodel);
                         }
-                        //msg.vmsg.tag  = LV_PMAN_STACK_MSG_TAG_CHANGE_PAGE_EXTRA;
-                        //msg.vmsg.as.destination.extra = user_event->io_data;
-                        //msg.vmsg.as.destination.page  = (void *)&page_log;
+                        msg.stack_msg.tag                  = PMAN_STACK_MSG_TAG_CHANGE_PAGE_EXTRA;
+                        msg.stack_msg.as.destination.extra = user_event->io_data;
+                        msg.stack_msg.as.destination.page  = (void *)&page_log;
                     }
                     break;
                 default:
@@ -468,8 +468,8 @@ static lv_pman_msg_t process_page_event(lv_pman_handle_t handle, void *state, lv
             break;
         }
 
-        case LV_PMAN_EVENT_TAG_LVGL: {
-            lv_obj_t *target = lv_event_get_current_target(event.as.lvgl);
+        case PMAN_EVENT_TAG_LVGL: {
+            lv_obj_t           *target  = lv_event_get_current_target(event.as.lvgl);
             view_object_data_t *objdata = lv_obj_get_user_data(target);
 
             if (lv_event_get_code(event.as.lvgl) == LV_EVENT_CLICKED) {
@@ -482,13 +482,13 @@ static lv_pman_msg_t process_page_event(lv_pman_handle_t handle, void *state, lv
                         break;
 
                     case STATS_BTN_ID:
-                        //msg.vmsg.tag = LV_PMAN_STACK_MSG_TAG_CHANGE_PAGE;
-                        //msg.vmsg.as.destination.page = (void *)&page_stats;
+                        msg.stack_msg.tag                 = PMAN_STACK_MSG_TAG_CHANGE_PAGE;
+                        msg.stack_msg.as.destination.page = (void *)&page_stats;
                         break;
 
                     case SETTINGS_BTN_ID:
-                        //msg.vmsg.tag = LV_PMAN_STACK_MSG_TAG_CHANGE_PAGE;
-                        //msg.vmsg.as.destination.page = (void *)&page_tech_settings;
+                        msg.stack_msg.tag = PMAN_STACK_MSG_TAG_CHANGE_PAGE;
+                        msg.stack_msg.as.destination.page = (void *)&page_tech_settings;
                         break;
 
                     case PASSWORD_ID:
@@ -501,18 +501,18 @@ static lv_pman_msg_t process_page_event(lv_pman_handle_t handle, void *state, lv
                         break;
 
                     case NETWORK_BTN_ID:
-                        //msg.vmsg.tag = LV_PMAN_STACK_MSG_TAG_CHANGE_PAGE;
-                        //msg.vmsg.as.destination.page = (void *)&page_network;
+                        msg.stack_msg.tag = PMAN_STACK_MSG_TAG_CHANGE_PAGE;
+                        msg.stack_msg.as.destination.page = (void *)&page_network;
                         break;
 
                     case LOG_BTN_ID:
                         data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_READ_LOG_FILE;
-                        data->blanket = view_common_create_blanket(lv_scr_act());
+                        data->blanket   = view_common_create_blanket(lv_scr_act());
                         break;
 
                     case DRIVE_BTN_ID:
-                        //msg.vmsg.tag = LV_PMAN_STACK_MSG_TAG_CHANGE_PAGE;
-                        //msg.vmsg.as.destination.page = (void *)&page_drive;
+                        msg.stack_msg.tag = PMAN_STACK_MSG_TAG_CHANGE_PAGE;
+                        msg.stack_msg.as.destination.page = (void *)&page_drive;
                         break;
 
                     case PARAMETER_KB_ID:
@@ -555,7 +555,7 @@ static lv_pman_msg_t process_page_event(lv_pman_handle_t handle, void *state, lv
                             model_clear_marks_to_save(pmodel);
                             data->blanket = view_common_create_blanket(lv_scr_act());
                         } else {
-                            msg.vmsg.tag = LV_PMAN_STACK_MSG_TAG_BACK;
+                            msg.stack_msg.tag = PMAN_STACK_MSG_TAG_BACK;
                         }
                         break;
                     }
@@ -632,9 +632,9 @@ static lv_pman_msg_t process_page_event(lv_pman_handle_t handle, void *state, lv
                                 break;
 
                             case PROG_BTNMX_CONFIRM:
-                                //msg.vmsg.tag  = LV_PMAN_STACK_MSG_TAG_CHANGE_PAGE_EXTRA;
-                                //msg.vmsg.as.destination.extra = (void *)(uintptr_t)data->prog.selected_prog;
-                                //msg.vmsg.as.destination.page  = (void *)&page_program;
+                                msg.stack_msg.tag  = PMAN_STACK_MSG_TAG_CHANGE_PAGE_EXTRA;
+                                msg.stack_msg.as.destination.extra = (void *)(uintptr_t)data->prog.selected_prog;
+                                msg.stack_msg.as.destination.page  = (void *)&page_program;
                                 break;
 
                             case PROG_BTNMX_REMOVE:
@@ -682,14 +682,15 @@ static lv_pman_msg_t process_page_event(lv_pman_handle_t handle, void *state, lv
                         break;
 
                     case PARAMETER_ROLLER1_ID:
-                        model_parameter_set_value(
-                            &data->parmac.par,
-                            (uint16_t)((parameter_to_long(&data->parmac.par) % 60) + lv_roller_get_selected(target) * 60));
+                        model_parameter_set_value(&data->parmac.par,
+                                                  (uint16_t)((parameter_to_long(&data->parmac.par) % 60) +
+                                                             lv_roller_get_selected(target) * 60));
                         break;
 
                     case PARAMETER_ROLLER2_ID: {
                         uint16_t value = (uint16_t)parameter_to_long(&data->parmac.par);
-                        model_parameter_set_value(&data->parmac.par, (uint16_t)(value - (value % 60) + lv_roller_get_selected(target)));
+                        model_parameter_set_value(&data->parmac.par,
+                                                  (uint16_t)(value - (value % 60) + lv_roller_get_selected(target)));
                         break;
                     }
 
@@ -698,7 +699,8 @@ static lv_pman_msg_t process_page_event(lv_pman_handle_t handle, void *state, lv
                         break;
 
                     case PARAMETER_SWITCH_ID:
-                        model_parameter_set_value(&data->parmac.par, (uint16_t)lv_obj_has_state(target, LV_STATE_CHECKED));
+                        model_parameter_set_value(&data->parmac.par,
+                                                  (uint16_t)lv_obj_has_state(target, LV_STATE_CHECKED));
                         break;
                 }
             } else if (lv_event_get_code(event.as.lvgl) == LV_EVENT_READY) {
@@ -722,7 +724,7 @@ static lv_pman_msg_t process_page_event(lv_pman_handle_t handle, void *state, lv
                         break;
                     }
 
-                    case PASSWORD_KEYBOARD_ID:
+                    case PASSWORD_KEYBOARD_ID: {
                         lv_obj_t *ta = lv_keyboard_get_textarea(target);
 
                         data->user.tosave = 1;
@@ -733,6 +735,7 @@ static lv_pman_msg_t process_page_event(lv_pman_handle_t handle, void *state, lv
                             data->password_blanket = NULL;
                         }
                         break;
+                    }
                 }
             } else if (lv_event_get_code(event.as.lvgl) == LV_EVENT_CANCEL) {
                 switch (objdata->id) {
@@ -764,10 +767,10 @@ static lv_pman_msg_t process_page_event(lv_pman_handle_t handle, void *state, lv
 
 
 
-const lv_pman_page_t page_settings = {
+const pman_page_t page_settings = {
     .create        = create_page,
-    .close         = lv_pman_close_all,
-    .destroy       = lv_pman_destroy_all,
+    .close         = pman_close_all,
+    .destroy       = pman_destroy_all,
     .process_event = process_page_event,
     .open          = open_page,
 };

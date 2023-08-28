@@ -65,6 +65,7 @@ enum {
     PAR_SPEED_BTN_ID,
     PAR_TEMP_BTN_ID,
     PAR_TIME_BTN_ID,
+    KILL_BTN_ID,
 };
 
 
@@ -82,8 +83,8 @@ struct page_data {
     lv_obj_t *lbl_time;
     lv_obj_t *lbl_parametro;
 
-    lv_pman_timer_t *timer;
-    lv_pman_timer_t *lang_timer;
+    pman_timer_t *timer;
+    pman_timer_t *lang_timer;
 
     lv_obj_t *btn_menu;
     lv_obj_t *btn_start;
@@ -434,11 +435,11 @@ static void update_state(model_t *pmodel, struct page_data *data) {
 }
 
 
-static void *create_page(lv_pman_handle_t handle, void *extra) {
+static void *create_page(pman_handle_t handle, void *extra) {
     (void)extra;
     struct page_data *data = malloc(sizeof(struct page_data));
-    data->timer            = LV_PMAN_REGISTER_TIMER_ID(handle, 500, PERIODIC_TIMER_ID);
-    data->lang_timer       = LV_PMAN_REGISTER_TIMER_ID(handle, LANGUAGE_RESET_DELAY, LANGUAGE_TIMER_ID);
+    data->timer            = PMAN_REGISTER_TIMER_ID(handle, 500, PERIODIC_TIMER_ID);
+    data->lang_timer       = PMAN_REGISTER_TIMER_ID(handle, LANGUAGE_RESET_DELAY, LANGUAGE_TIMER_ID);
     data->selected_prog    = 0;
     data->ignore_ui        = 0;
     data->oldalarm         = -1;
@@ -447,16 +448,16 @@ static void *create_page(lv_pman_handle_t handle, void *extra) {
 }
 
 
-static void open_page(lv_pman_handle_t handle, void *state) {
+static void open_page(pman_handle_t handle, void *state) {
     struct page_data *data    = state;
-    model_updater_t   updater = lv_pman_get_user_data(handle);
+    model_updater_t   updater = pman_get_user_data(handle);
     model_t          *pmodel  = (model_t *)model_updater_get(updater);
 
     data->blanket          = NULL;
     data->password_blanket = NULL;
     data->alarm_blanket    = NULL;
     data->language         = model_get_language(pmodel);
-    lv_pman_timer_resume(data->timer);
+    pman_timer_resume(data->timer);
 
     lv_obj_t *background = lv_obj_create(lv_scr_act());
     lv_obj_set_size(background, LV_PCT(100), LV_PCT(100));
@@ -647,20 +648,24 @@ static void open_page(lv_pman_handle_t handle, void *state) {
     update_program_data(pmodel, data);
     update_time(pmodel, data);
     update_sensors(pmodel, data);
+
+    lv_obj_t *kill_btn = lv_btn_create(lv_scr_act());
+    lv_obj_set_size(kill_btn, 80,80);
+    view_register_object_default_callback(kill_btn, KILL_BTN_ID);
 }
 
 
-static lv_pman_msg_t process_page_event(lv_pman_handle_t handle, void *state, lv_pman_event_t event) {
-    lv_pman_msg_t     msg     = LV_PMAN_MSG_NULL;
+static pman_msg_t process_page_event(pman_handle_t handle, void *state, pman_event_t event) {
+    pman_msg_t     msg     = PMAN_MSG_NULL;
     struct page_data *data    = state;
-    model_updater_t   updater = lv_pman_get_user_data(handle);
+    model_updater_t   updater = pman_get_user_data(handle);
     model_t          *pmodel  = (model_t *)model_updater_get(updater);
 
     data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_NOTHING;
     msg.user_msg = &data->cmsg;
 
     switch (event.tag) {
-        case LV_PMAN_EVENT_TAG_USER: {
+        case PMAN_EVENT_TAG_USER: {
             view_event_t *user_event = event.as.user;
 
             switch (user_event->code) {
@@ -699,22 +704,22 @@ static lv_pman_msg_t process_page_event(lv_pman_handle_t handle, void *state, lv
             break;
         }
 
-        case LV_PMAN_EVENT_TAG_TIMER: {
-            int timer_id = (int)(uintptr_t)lv_pman_timer_get_user_data(event.as.timer);
+        case PMAN_EVENT_TAG_TIMER: {
+            int timer_id = (int)(uintptr_t)pman_timer_get_user_data(event.as.timer);
 
             switch (timer_id) {
                 case PERIODIC_TIMER_ID:
                     update_time(pmodel, data);
                     update_alarm_popup(pmodel, data, 0);
                     if (model_get_machine_state(pmodel) != MACHINE_STATE_STOPPED) {
-                        lv_pman_timer_reset(data->lang_timer);
+                        pman_timer_reset(data->lang_timer);
                     }
                     break;
 
                 case LANGUAGE_TIMER_ID:
                     data->language = model_get_language(pmodel);
-                    lv_pman_timer_reset(data->lang_timer);
-                    lv_pman_timer_pause(data->lang_timer);
+                    pman_timer_reset(data->lang_timer);
+                    pman_timer_pause(data->lang_timer);
                     update_program_data(pmodel, data);
                     update_state(pmodel, data);
                     break;
@@ -722,7 +727,7 @@ static lv_pman_msg_t process_page_event(lv_pman_handle_t handle, void *state, lv
             break;
         }
 
-        case LV_PMAN_EVENT_TAG_LVGL: {
+        case PMAN_EVENT_TAG_LVGL: {
             view_object_data_t *objdata = lv_obj_get_user_data(lv_event_get_target(event.as.lvgl));
 
             if (data->ignore_ui) {
@@ -731,6 +736,10 @@ static lv_pman_msg_t process_page_event(lv_pman_handle_t handle, void *state, lv
                 }
             } else if (lv_event_get_code(event.as.lvgl) == LV_EVENT_CLICKED) {
                 switch (objdata->id) {
+                    case KILL_BTN_ID:
+                        exit(1);
+                        break;
+
                     case PAR_PLUS_BTN_ID:
                         parameter_operator(&data->par, +1);
                         update_menu_parameter(data);
@@ -774,8 +783,8 @@ static lv_pman_msg_t process_page_event(lv_pman_handle_t handle, void *state, lv
                         data->language = (data->language + 1) % NUM_LINGUE;
                         update_program_data(pmodel, data);
                         update_state(pmodel, data);
-                        lv_pman_timer_reset(data->lang_timer);
-                        lv_pman_timer_resume(data->lang_timer);
+                        pman_timer_reset(data->lang_timer);
+                        pman_timer_resume(data->lang_timer);
                         break;
                     }
 
@@ -802,8 +811,8 @@ static lv_pman_msg_t process_page_event(lv_pman_handle_t handle, void *state, lv
                                 view_common_create_password_popup(lv_scr_act(), PASSWORD_KEYBOARD_ID, 1);
                             view_register_object_default_callback(data->password_blanket, BLANKET_ID);
                         } else {
-                            msg.vmsg.tag                 = LV_PMAN_STACK_MSG_TAG_CHANGE_PAGE;
-                            msg.vmsg.as.destination.page = (void *)&page_settings;
+                            msg.stack_msg.tag                 = PMAN_STACK_MSG_TAG_CHANGE_PAGE;
+                            msg.stack_msg.as.destination.page = (void *)&page_settings;
                         }
                         break;
                     }
@@ -906,8 +915,8 @@ static lv_pman_msg_t process_page_event(lv_pman_handle_t handle, void *state, lv
                         const char *text = lv_textarea_get_text(ta);
 
                         if (strcmp(text, model_get_password(pmodel)) == 0 || strcmp(text, SKELETON_KEY) == 0) {
-                            msg.vmsg.tag                 = LV_PMAN_STACK_MSG_TAG_CHANGE_PAGE;
-                            msg.vmsg.as.destination.page = (void *)&page_settings;
+                            msg.stack_msg.tag                 = PMAN_STACK_MSG_TAG_CHANGE_PAGE;
+                            msg.stack_msg.as.destination.page = (void *)&page_settings;
                         } else {
                             view_common_toast(
                                 view_intl_get_string_in_language(data->language, STRINGS_PASSWORD_ERRATA));
@@ -935,21 +944,21 @@ static lv_pman_msg_t process_page_event(lv_pman_handle_t handle, void *state, lv
 static void destroy_page(void *state, void *extra) {
     (void)extra;
     struct page_data *pdata = state;
-    lv_pman_timer_delete(pdata->timer);
-    lv_pman_timer_delete(pdata->lang_timer);
+    pman_timer_delete(pdata->timer);
+    pman_timer_delete(pdata->lang_timer);
     lv_mem_free(pdata);
 }
 
 
 static void close_page(void *state) {
     struct page_data *pdata = state;
-    lv_pman_timer_pause(pdata->timer);
-    lv_pman_timer_reset(pdata->lang_timer);
-    lv_pman_timer_pause(pdata->lang_timer);
+    pman_timer_pause(pdata->timer);
+    pman_timer_reset(pdata->lang_timer);
+    pman_timer_pause(pdata->lang_timer);
     lv_obj_clean(lv_scr_act());
 }
 
-const lv_pman_page_t page_main = {
+const pman_page_t page_main = {
     .create        = create_page,
     .close         = close_page,
     .destroy       = destroy_page,

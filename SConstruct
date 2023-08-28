@@ -80,7 +80,7 @@ def get_target(env, name, suffix="", dependencies=[]):
     sources += [File(f"{COMPONENTS}/log/src/log.c")]
 
     gel_env = env
-    gel_selected = ["pagemanager", "collections",
+    gel_selected = ["collections",
                     "parameter", "timer"]
     (gel, include) = SConscript(
         f'{COMPONENTS}/generic_embedded_libs/SConscript', variant_dir=f"build-{name}/gel", exports=['gel_env', 'gel_selected'])
@@ -140,26 +140,27 @@ def main():
     compileDB = simulated_env.CompilationDatabase('compile_commands.json')
 
     ip_addr = ARGUMENTS.get("ip", "")
+    compatibility_options = "-o StrictHostKeyChecking=no -o PubkeyAcceptedAlgorithms=+ssh-rsa"
     PhonyTargets(
         'kill-remote',
-        f"ssh -o StrictHostKeyChecking=no root@{ip_addr} 'killall gdbserver; killall app; killall sh'; true", None)
+        f"ssh {compatibility_options} root@{ip_addr} 'killall gdbserver; killall app; killall sh'; true", None)
     PhonyTargets(
-        "scp", f"scp -o StrictHostKeyChecking=no DS2021 root@{ip_addr}:/tmp/app", [target_prog, "kill-remote"])
+        "scp", f"scp {compatibility_options} DS2021 root@{ip_addr}:/tmp/app", [target_prog, "kill-remote"])
     PhonyTargets(
-        'ssh', f"ssh -o StrictHostKeyChecking=no root@{ip_addr}", [])
+        'ssh', f"ssh {compatibility_options} root@{ip_addr}", [])
     PhonyTargets(
         'run-remote',
-        f"ssh -o StrictHostKeyChecking=no root@{ip_addr} /tmp/app",
+        f"ssh {compatibility_options} root@{ip_addr} /tmp/app",
         'scp')
     PhonyTargets(
         "update-remote",
-        f'ssh -o StrictHostKeyChecking=no root@{ip_addr} "mount -o rw,remount / && cp /tmp/app /root/app && sync && reboot && exit"', "scp")
+        f'ssh {compatibility_options} root@{ip_addr} "mount -o rw,remount / && cp /tmp/app /root/app && sync && reboot && exit"', "scp")
     PhonyTargets(
         "debug",
-        f"ssh -o StrictHostKeyChecking=no root@{ip_addr} gdbserver localhost:1235 /tmp/app", "scp")
+        f"ssh {compatibility_options} root@{ip_addr} gdbserver localhost:1235 /tmp/app", "scp")
     PhonyTargets(
         "run-remote",
-        f"ssh -o StrictHostKeyChecking=no root@{ip_addr} /tmp/app",
+        f"ssh {compatibility_options} root@{ip_addr} /tmp/app",
         "scp")
 
     Depends(simulated_prog, compileDB)

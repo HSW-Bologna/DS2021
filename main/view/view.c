@@ -7,7 +7,6 @@
 #include "theme/style.h"
 #include "theme/theme.h"
 #include "widgets/custom_tabview.h"
-#include "lv_page_manager.h"
 
 
 static void event_callback(lv_event_t *event);
@@ -16,11 +15,11 @@ static void plus_minus_keyboard_cb(lv_event_t *event);
 
 static lv_indev_t *indev;
 
-static lv_pman_t page_manager = {0};
-lv_pman_handle_t pman_handle  = &page_manager;
+static pman_t page_manager = {0};
+pman_handle_t pman_handle  = &page_manager;
 
 
-void view_init(model_updater_t updater, lv_pman_user_msg_cb_t controller_cb,
+void view_init(model_updater_t updater, pman_user_msg_cb_t controller_cb,
                void (*flush_cb)(struct _lv_disp_drv_t *disp_drv, const lv_area_t *area, lv_color_t *color_p),
                void (*read_cb)(struct _lv_indev_drv_t *indev_drv, lv_indev_data_t *data)) {
     lv_init();
@@ -52,12 +51,12 @@ void view_init(model_updater_t updater, lv_pman_user_msg_cb_t controller_cb,
     /*Register the driver in LVGL and save the created input device object*/
     indev = lv_indev_drv_register(&indev_drv);
 
-    lv_pman_init(&page_manager, updater, indev, controller_cb);
+    pman_init(&page_manager, updater, indev, controller_cb);
 }
 
 
-void view_change_page_extra(model_t *model, const lv_pman_page_t *page, void *extra) {
-    lv_pman_change_page_extra(&page_manager, *page, extra);
+void view_change_page_extra(model_t *model, const pman_page_t *page, void *extra) {
+    pman_change_page_extra(&page_manager, *page, extra);
     // event_queue_init(&q);     // Butta tutti gli eventi precedenti quando cambi la pagina
     // view_event((view_event_t){.code = VIEW_EVENT_CODE_OPEN});
     // lv_indev_reset(indev, NULL);
@@ -65,7 +64,7 @@ void view_change_page_extra(model_t *model, const lv_pman_page_t *page, void *ex
 }
 
 
-void view_change_page(model_t *model, const lv_pman_page_t *page) {
+void view_change_page(model_t *model, const pman_page_t *page) {
     return view_change_page_extra(model, page, NULL);
 }
 
@@ -73,7 +72,7 @@ void view_change_page(model_t *model, const lv_pman_page_t *page) {
 
 void view_event(view_event_t event) {
     // event_queue_enqueue(&q, &event);
-    lv_pman_event(&page_manager, LV_PMAN_USER_EVENT(&event));
+    pman_event(&page_manager, PMAN_USER_EVENT(&event));
 }
 
 
@@ -88,17 +87,17 @@ void view_register_object_default_callback_with_number(lv_obj_t *obj, int id, in
     data->number             = number;
     lv_obj_set_user_data(obj, data);
 
-    lv_pman_unregister_obj_event(&page_manager, obj);
-    lv_pman_register_obj_event(&page_manager, obj, LV_EVENT_CLICKED);
-    lv_pman_register_obj_event(&page_manager, obj, LV_EVENT_VALUE_CHANGED);
-    lv_pman_register_obj_event(&page_manager, obj, LV_EVENT_RELEASED);
-    lv_pman_register_obj_event(&page_manager, obj, LV_EVENT_PRESSED);
-    lv_pman_register_obj_event(&page_manager, obj, LV_EVENT_PRESSING);
-    lv_pman_register_obj_event(&page_manager, obj, LV_EVENT_LONG_PRESSED);
-    lv_pman_register_obj_event(&page_manager, obj, LV_EVENT_LONG_PRESSED_REPEAT);
-    lv_pman_register_obj_event(&page_manager, obj, LV_EVENT_CANCEL);
-    lv_pman_register_obj_event(&page_manager, obj, LV_EVENT_READY);
-    lv_pman_set_obj_self_destruct(obj);
+    pman_unregister_obj_event(&page_manager, obj);
+    pman_register_obj_event(&page_manager, obj, LV_EVENT_CLICKED);
+    pman_register_obj_event(&page_manager, obj, LV_EVENT_VALUE_CHANGED);
+    pman_register_obj_event(&page_manager, obj, LV_EVENT_RELEASED);
+    pman_register_obj_event(&page_manager, obj, LV_EVENT_PRESSED);
+    pman_register_obj_event(&page_manager, obj, LV_EVENT_PRESSING);
+    pman_register_obj_event(&page_manager, obj, LV_EVENT_LONG_PRESSED);
+    pman_register_obj_event(&page_manager, obj, LV_EVENT_LONG_PRESSED_REPEAT);
+    pman_register_obj_event(&page_manager, obj, LV_EVENT_CANCEL);
+    pman_register_obj_event(&page_manager, obj, LV_EVENT_READY);
+    pman_set_obj_self_destruct(obj);
 }
 
 
@@ -110,7 +109,7 @@ void view_register_keyboard_plus_minus_callback(lv_obj_t *kb, int id) {
     lv_obj_set_user_data(kb, data);
     lv_obj_remove_event_cb(kb, event_callback);
     lv_obj_remove_event_cb(kb, lv_keyboard_def_event_cb);
-    lv_pman_set_obj_self_destruct(kb);
+    pman_set_obj_self_destruct(kb);
     lv_obj_add_event_cb(kb, plus_minus_keyboard_cb, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_add_event_cb(kb, plus_minus_keyboard_cb, LV_EVENT_CANCEL, NULL);
     lv_obj_add_event_cb(kb, plus_minus_keyboard_cb, LV_EVENT_READY, NULL);
@@ -121,6 +120,8 @@ static void plus_minus_keyboard_cb(lv_event_t *event) {
     lv_obj_t           *obj     = lv_event_get_target(event);
     view_object_data_t *data    = lv_obj_get_user_data(lv_event_get_current_target(event));
     lv_obj_t           *ta      = lv_keyboard_get_textarea(obj);
+
+    /* TODO:
     pman_event_t        myevent = {.code = VIEW_EVENT_CODE_LVGL, .event = lv_event_get_code(event), .data = *data};
     if (ta != NULL) {
         myevent.string_value = lv_textarea_get_text(ta);
@@ -140,6 +141,7 @@ static void plus_minus_keyboard_cb(lv_event_t *event) {
         }
     }
     view_event(myevent);
+    */
 }
 
 

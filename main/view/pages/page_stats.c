@@ -1,4 +1,3 @@
-#if 0
 #include <stdio.h>
 #include <stdlib.h>
 #include "lvgl.h"
@@ -15,10 +14,12 @@ enum {
 
 struct page_data {
     lv_obj_t *table;
+
+    view_controller_message_t cmsg;
 };
 
 
-static void *create_page(model_t *model, void *extra) {
+static void *create_page(pman_handle_t handle, void *extra) {
     struct page_data *data = (struct page_data *)malloc(sizeof(struct page_data));
     return data;
 }
@@ -50,8 +51,12 @@ static void update_stats(model_t *pmodel, struct page_data *data) {
 }
 
 
-static void open_page(model_t *pmodel, void *arg) {
-    struct page_data *data = arg;
+static void open_page(pman_handle_t handle, void *state) {
+    struct page_data *data = state;
+
+    model_updater_t updater = pman_get_user_data(handle);
+    model_t        *pmodel  = (model_t *)model_updater_get(updater);
+
     view_common_create_title(lv_scr_act(), view_intl_get_string(pmodel, STRINGS_STATISTICHE), BACK_BTN_ID);
 
     lv_obj_t *page = lv_obj_create(lv_scr_act());
@@ -80,29 +85,47 @@ static void open_page(model_t *pmodel, void *arg) {
 }
 
 
-static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_t event) {
-    view_message_t    msg  = VIEW_NULL_MESSAGE;
-    struct page_data *data = arg;
+static pman_msg_t process_page_event(pman_handle_t handle, void *state, pman_event_t event) {
+    pman_msg_t        msg  = PMAN_MSG_NULL;
+    struct page_data *data = state;
     (void)data;
 
-    switch (event.code) {
-        case VIEW_EVENT_CODE_OPEN:
-            msg.cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_READ_STATISTICS;
+    model_updater_t updater = pman_get_user_data(handle);
+    model_t        *pmodel  = (model_t *)model_updater_get(updater);
+
+    data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_NOTHING;
+    msg.user_msg    = &data->cmsg;
+
+    switch (event.tag) {
+        case PMAN_EVENT_TAG_OPEN:
+            data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_READ_STATISTICS;
             break;
 
-        case VIEW_EVENT_CODE_STATS_READ:
-            update_stats(pmodel, data);
-            break;
+        case PMAN_EVENT_TAG_LVGL: {
+            lv_obj_t           *target  = lv_event_get_current_target(event.as.lvgl);
+            view_object_data_t *objdata = lv_obj_get_user_data(target);
 
-        case VIEW_EVENT_CODE_LVGL:
-            if (event.event == LV_EVENT_CLICKED) {
-                switch (event.data.id) {
+            if (lv_event_get_code(event.as.lvgl) == LV_EVENT_CLICKED) {
+                switch (objdata->id) {
                     case BACK_BTN_ID:
-                        msg.vmsg.code = VIEW_PAGE_MESSAGE_CODE_BACK;
+                        msg.stack_msg.tag = PMAN_STACK_MSG_TAG_BACK;
                         break;
                 }
             }
             break;
+        }
+
+
+        case PMAN_EVENT_TAG_USER: {
+            view_event_t *user_event = event.as.user;
+            switch (user_event->code) {
+                case VIEW_EVENT_CODE_STATS_READ:
+                    update_stats(pmodel, data);
+                    break;
+                default:
+                    break;
+            }
+        }
 
         default:
             break;
@@ -115,8 +138,7 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
 const pman_page_t page_stats = {
     .create        = create_page,
     .open          = open_page,
-    .close         = view_close_all,
-    .destroy       = view_destroy_all,
+    .close         = pman_close_all,
+    .destroy       = pman_destroy_all,
     .process_event = process_page_event,
 };
-#endif

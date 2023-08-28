@@ -1,4 +1,3 @@
-#if 0
 #include "lvgl.h"
 #include "view/view.h"
 #include "gel/pagemanager/page_manager.h"
@@ -26,11 +25,13 @@ struct page_data {
     lv_obj_t *import_btn;
     lv_obj_t *list;
     size_t    selected_archive;
+
+    view_controller_message_t cmsg;
 };
 
 
-static void *create_page(model_t *pmodel, void *extra) {
-    (void)pmodel;
+static void *create_page(pman_handle_t handle, void *extra) {
+    (void)handle;
     (void)extra;
     return malloc(sizeof(struct page_data));
 }
@@ -84,8 +85,11 @@ static void update_buttons(struct page_data *data, model_t *pmodel) {
 }
 
 
-static void open_page(model_t *pmodel, void *arg) {
+static void open_page(pman_handle_t handle, void *arg) {
     struct page_data *data = arg;
+
+    model_updater_t   updater = pman_get_user_data(handle);
+    model_t          *pmodel  = (model_t *)model_updater_get(updater);
 
     view_common_create_title(lv_scr_act(), view_intl_get_string(pmodel, STRINGS_GESTIONE_CHIAVETTA_ESTERNA),
                              BACK_BTN_ID);
@@ -116,14 +120,23 @@ static void open_page(model_t *pmodel, void *arg) {
 }
 
 
-static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_t event) {
-    view_message_t    msg  = VIEW_NULL_MESSAGE;
+static pman_msg_t process_page_event(pman_handle_t handle, void *arg, pman_event_t event) {
+    pman_msg_t    msg  = PMAN_MSG_NULL;
     struct page_data *data = arg;
 
-    switch (event.code) {
+    data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_NOTHING;
+    msg.user_msg    = &data->cmsg;
+
+    model_updater_t   updater = pman_get_user_data(handle);
+    model_t          *pmodel  = (model_t *)model_updater_get(updater);
+
+    switch (event.tag) {
+        case PMAN_EVENT_TAG_USER: {
+                                      view_event_t *user_event = event.as.user;
+                                      switch (user_event->code) {
         case VIEW_EVENT_CODE_DRIVE:
             if (!model_is_drive_mounted(pmodel)) {
-                msg.vmsg.code = VIEW_PAGE_MESSAGE_CODE_BACK;
+                msg.stack_msg.tag = PMAN_STACK_MSG_TAG_BACK;
             } else {
                 update_buttons(data, pmodel);
             }
@@ -136,24 +149,30 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
             data->blanket = NULL;
             update_buttons(data, pmodel);
 
-            if (event.error) {
+            if (user_event->error) {
                 view_common_io_error_toast(pmodel) ;
             }
             break;
 
-        case VIEW_EVENT_CODE_TIMER:
+        default:
             break;
+                                  }
+            break;
+    }
 
-        case VIEW_EVENT_CODE_LVGL:
-            if (event.event == LV_EVENT_CLICKED) {
-                switch (event.data.id) {
+        case PMAN_EVENT_TAG_LVGL: {
+            lv_obj_t           *target  = lv_event_get_current_target(event.as.lvgl);
+            view_object_data_t *objdata = lv_obj_get_user_data(target);
+
+            if (lv_event_get_code(event.as.lvgl) == LV_EVENT_CLICKED) {
+                switch (objdata->id) {
                     case BACK_BTN_ID:
-                        msg.vmsg.code = VIEW_PAGE_MESSAGE_CODE_BACK;
+                        msg.stack_msg.tag = PMAN_STACK_MSG_TAG_BACK;
                         break;
 
                     case LIST_ITEM_ID:
-                        view_common_select_btn_in_list(data->list, event.data.number);
-                        data->selected_archive = event.data.number;
+                        view_common_select_btn_in_list(data->list, objdata->number);
+                        data->selected_archive = objdata->number;
                         break;
 
                     case CANCEL_BTN_ID:
@@ -163,8 +182,8 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                         break;
 
                     case IMPORT_CONFIRM_BTN_ID:
-                        msg.cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_IMPORT_CURRENT_MACHINE;
-                        strcpy(msg.cmsg.name, pmodel->system.drive_machines[data->selected_archive]);
+                        data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_IMPORT_CURRENT_MACHINE;
+                        strcpy(data->cmsg.name, pmodel->system.drive_machines[data->selected_archive]);
                         if (data->blanket != NULL) {
                             lv_obj_del(data->blanket);
                         }
@@ -175,7 +194,7 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                         if (data->blanket != NULL) {
                             lv_obj_del(data->blanket);
                         }
-                        msg.cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_EXPORT_CURRENT_MACHINE;
+                        data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_EXPORT_CURRENT_MACHINE;
                         data->blanket = view_common_create_blanket(lv_scr_act());
                         break;
 
@@ -186,7 +205,7 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                                 OVERWRITE_BTN_ID, LV_SYMBOL_CLOSE, CANCEL_BTN_ID);
                             data->blanket = lv_obj_get_parent(popup);
                         } else {
-                            msg.cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_EXPORT_CURRENT_MACHINE;
+                            data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_EXPORT_CURRENT_MACHINE;
                             data->blanket = view_common_create_blanket(lv_scr_act());
                         }
                         break;
@@ -199,11 +218,9 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                         break;
                     }
                 }
-            } else if (event.event == LV_EVENT_VALUE_CHANGED) {
-            } else if (event.event == LV_EVENT_CANCEL) {
-            } else if (event.event == LV_EVENT_READY) {
             }
             break;
+                                  }
 
         default:
             break;
@@ -215,10 +232,9 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
 
 
 const pman_page_t page_drive = {
-    .close         = view_close_all,
-    .destroy       = view_destroy_all,
+    .close         = pman_close_all,
+    .destroy       = pman_destroy_all,
     .process_event = process_page_event,
     .open          = open_page,
     .create        = create_page,
 };
-#endif

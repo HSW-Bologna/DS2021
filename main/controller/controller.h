@@ -8,6 +8,6 @@
 
 void controller_init(model_t *pmodel);
 void controller_manage(model_t *pmodel);
-void controller_manage_message(lv_pman_handle_t handle, void *msg);
+void controller_manage_message(pman_handle_t handle, void *msg);
 
 #endif

@@ -1,4 +1,3 @@
-#if 0
 #include <stdio.h>
 #include "lvgl.h"
 #include "view/view.h"
@@ -34,6 +33,8 @@ struct page_data {
 
     size_t num_prog;
     size_t num_step;
+
+    view_controller_message_t cmsg;
 };
 
 
@@ -68,19 +69,25 @@ static void update_param_list(struct page_data *data, model_t *pmodel) {
 }
 
 
-static void *create_page(model_t *pmodel, void *extra) {
+static void *create_page(pman_handle_t handle, void *extra) {
     struct page_data *data = malloc(sizeof(struct page_data));
-    size_t           *pars = extra;
-    data->num_prog         = pars[0];
-    data->num_step         = pars[1];
+
+    model_updater_t updater = pman_get_user_data(handle);
+    model_t        *pmodel  = (model_t *)model_updater_get(updater);
+
+    size_t *pars   = extra;
+    data->num_prog = pars[0];
+    data->num_step = pars[1];
     parciclo_init(pmodel, data->num_prog, data->num_step);
     return data;
 }
 
 
-static void open_page(model_t *pmodel, void *arg) {
-    (void)pmodel;
+static void open_page(pman_handle_t handle, void *arg) {
     struct page_data *data = arg;
+
+    model_updater_t updater = pman_get_user_data(handle);
+    model_t        *pmodel  = (model_t *)model_updater_get(updater);
 
     dryer_program_t   *p      = model_get_program(pmodel, data->num_prog);
     parameters_step_t *s      = &p->steps[data->num_step];
@@ -102,19 +109,25 @@ static void open_page(model_t *pmodel, void *arg) {
 }
 
 
-static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_t event) {
-    view_message_t    msg  = VIEW_NULL_MESSAGE;
+static pman_msg_t process_page_event(pman_handle_t handle, void *arg, pman_event_t event) {
+    pman_msg_t        msg  = PMAN_MSG_NULL;
     struct page_data *data = arg;
 
-    switch (event.code) {
-        case VIEW_EVENT_CODE_TIMER:
-            break;
+    model_updater_t updater = pman_get_user_data(handle);
+    model_t        *pmodel  = (model_t *)model_updater_get(updater);
 
-        case VIEW_EVENT_CODE_LVGL: {
-            if (event.event == LV_EVENT_CLICKED) {
-                switch (event.data.id) {
+    data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_NOTHING;
+    msg.user_msg    = &data->cmsg;
+
+    switch (event.tag) {
+        case PMAN_EVENT_TAG_LVGL: {
+            lv_obj_t           *target  = lv_event_get_current_target(event.as.lvgl);
+            view_object_data_t *objdata = lv_obj_get_user_data(target);
+
+            if (lv_event_get_code(event.as.lvgl) == LV_EVENT_CLICKED) {
+                switch (objdata->id) {
                     case PARAMETER_KB_ID:
-                        parameter_operator(&data->par, event.data.number);
+                        parameter_operator(&data->par, objdata->number);
                         if (data->textarea != NULL) {
                             char string[64] = {0};
                             snprintf(string, sizeof(string), "%li", parameter_to_long(&data->par));
@@ -123,17 +136,17 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                         break;
 
                     case BACK_BTN_ID:
-                        msg.vmsg.code = VIEW_PAGE_MESSAGE_CODE_BACK;
+                        msg.stack_msg.tag = PMAN_STACK_MSG_TAG_BACK;
                         break;
 
                     case PARAMETER_BTN_ID: {
                         if (data->editor != NULL) {
                             lv_obj_del(data->editor);
                         }
-                        view_common_select_btn_in_list(data->list, event.data.number);
-                        parameter_clone(&data->par, parciclo_get_handle(pmodel, event.data.number),
+                        view_common_select_btn_in_list(data->list, objdata->number);
+                        parameter_clone(&data->par, parciclo_get_handle(pmodel, objdata->number),
                                         (void *)&data->par_buffer);
-                        data->num = event.data.number;
+                        data->num = objdata->number;
 
                         data->editor = view_common_build_param_editor(
                             lv_scr_act(), &data->textarea, pmodel, &data->par, data->num, PARAMETER_DROPDOWN_ID,
@@ -168,32 +181,36 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                             lv_obj_del(data->editor);
                             data->editor = NULL;
                         }
-                        model_parameter_set_value(parciclo_get_handle(pmodel, event.data.number),
+                        model_parameter_set_value(parciclo_get_handle(pmodel, objdata->number),
                                                   parameter_to_long(&data->par));
                         update_param_list(data, pmodel);
                         model_mark_program_to_save(pmodel, data->num_prog);
                         break;
                 }
-            } else if (event.event == LV_EVENT_VALUE_CHANGED) {
-                switch (event.data.id) {
+            } else if (lv_event_get_code(event.as.lvgl) == LV_EVENT_VALUE_CHANGED) {
+                switch (objdata->id) {
                     case PARAMETER_TA_ID:
-                        model_parameter_set_value(&data->par, atoi(event.string_value));
+                        model_parameter_set_value(&data->par, atoi(lv_textarea_get_text(target)));
                         break;
 
                     case PARAMETER_ROLLER1_ID:
-                        model_parameter_set_value(&data->par,
-                                                  (uint16_t)((parameter_to_long(&data->par) % 60) + event.value * 60));
+                        model_parameter_set_value(&data->par, (uint16_t)((parameter_to_long(&data->par) % 60) +
+                                                                         lv_roller_get_selected(target) * 60));
                         break;
 
                     case PARAMETER_ROLLER2_ID: {
                         uint16_t value = (uint16_t)parameter_to_long(&data->par);
-                        model_parameter_set_value(&data->par, (uint16_t)(value - (value % 60) + event.value));
+                        model_parameter_set_value(&data->par,
+                                                  (uint16_t)(value - (value % 60) + lv_roller_get_selected(target)));
                         break;
                     }
 
                     case PARAMETER_DROPDOWN_ID:
+                        model_parameter_set_value(&data->par, (uint16_t)lv_dropdown_get_selected(target));
+                        break;
+
                     case PARAMETER_SWITCH_ID:
-                        model_parameter_set_value(&data->par, (uint16_t)event.value);
+                        model_parameter_set_value(&data->par, (uint16_t)lv_obj_has_state(target, LV_STATE_CHECKED));
                         break;
                 }
             }
@@ -210,10 +227,9 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
 
 
 const pman_page_t page_step = {
-    .close         = view_close_all,
-    .destroy       = view_destroy_all,
+    .close         = pman_close_all,
+    .destroy       = pman_destroy_all,
     .process_event = process_page_event,
     .open          = open_page,
     .create        = create_page,
 };
-#endif

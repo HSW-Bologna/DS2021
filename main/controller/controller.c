@@ -55,8 +55,8 @@ void controller_init(model_t *pmodel) {
 }
 
 
-void controller_manage_message(lv_pman_handle_t handle, void *msg) {
-    model_updater_t updater = lv_pman_get_user_data(handle);
+void controller_manage_message(pman_handle_t handle, void *msg) {
+    model_updater_t updater = pman_get_user_data(handle);
     model_t        *pmodel  = (model_t *)model_updater_get(updater);
 
     view_controller_message_t *cmsg = msg;

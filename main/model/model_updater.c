@@ -7,11 +7,9 @@ struct model_updater {
     model_t *pmodel;
 };
 
-static_assert(sizeof(struct model_updater) == sizeof(static_model_updater_t),
-              "Inconsistent data size between hidden struct and static buffer!");
-
 
 model_updater_t model_updater_init(model_t *pmodel, static_model_updater_t *buffer) {
+    assert(sizeof(struct model_updater) == sizeof(static_model_updater_t));
     model_updater_t updater = (model_updater_t)buffer;
     updater->pmodel         = pmodel;
     return updater;

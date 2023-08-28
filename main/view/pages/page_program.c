@@ -1,4 +1,3 @@
-#if 0
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -45,6 +44,8 @@ struct page_data {
     lv_obj_t *addbtn;
     lv_obj_t *blanket;
     lv_obj_t *mbox;
+
+    view_controller_message_t cmsg;
 };
 
 
@@ -101,7 +102,7 @@ static void update_step_list(struct page_data *data, model_t *pmodel) {
 }
 
 
-static void *create_page(model_t *model, void *extra) {
+static void *create_page(pman_handle_t handle, void *extra) {
     struct page_data *data = (struct page_data *)malloc(sizeof(struct page_data));
     if (extra) {
         data->num_prog = (int)(uintptr_t)extra;
@@ -116,7 +117,10 @@ static void *create_page(model_t *model, void *extra) {
 }
 
 
-static void open_page(model_t *pmodel, void *arg) {
+static void open_page(pman_handle_t handle, void *arg) {
+    model_updater_t updater = pman_get_user_data(handle);
+    model_t        *pmodel  = (model_t *)model_updater_get(updater);
+
     int               lingua = model_get_language(pmodel);
     struct page_data *data   = arg;
 
@@ -229,20 +233,29 @@ static void open_page(model_t *pmodel, void *arg) {
 
 
 
-static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_t event) {
-    view_message_t    msg  = VIEW_NULL_MESSAGE;
+static pman_msg_t process_page_event(pman_handle_t handle, void *arg, pman_event_t event) {
+    pman_msg_t        msg  = PMAN_MSG_NULL;
     struct page_data *data = arg;
 
-    switch (event.code) {
-        case VIEW_EVENT_CODE_LVGL: {
-            if (event.event == LV_EVENT_CLICKED) {
-                switch (event.data.id) {
+    model_updater_t updater = pman_get_user_data(handle);
+    model_t        *pmodel  = (model_t *)model_updater_get(updater);
+
+    data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_NOTHING;
+    msg.user_msg    = &data->cmsg;
+
+    switch (event.tag) {
+        case PMAN_EVENT_TAG_LVGL: {
+            lv_obj_t           *target  = lv_event_get_current_target(event.as.lvgl);
+            view_object_data_t *objdata = lv_obj_get_user_data(target);
+
+            if (lv_event_get_code(event.as.lvgl) == LV_EVENT_CLICKED) {
+                switch (objdata->id) {
                     case BACK_BTN_ID:
-                        msg.vmsg.code = VIEW_PAGE_MESSAGE_CODE_BACK;
+                        msg.stack_msg.tag = PMAN_STACK_MSG_TAG_BACK;
                         break;
 
                     case STEP_BTN_ID:
-                        data->selected_step = event.data.number;
+                        data->selected_step = objdata->number;
                         view_common_select_btn_in_list(data->steplist, data->selected_step);
                         lv_btnmatrix_clear_btn_ctrl_all(data->btnmx, LV_BTNMATRIX_CTRL_DISABLED);
                         if (model_get_program(pmodel, data->num_prog)->num_steps >= MAX_STEPS) {
@@ -259,7 +272,7 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                             lv_obj_del(data->blanket);
                             data->blanket = NULL;
                         }
-                        program_insert_step(model_get_program(pmodel, data->num_prog), event.data.number,
+                        program_insert_step(model_get_program(pmodel, data->num_prog), objdata->number,
                                             data->future_pos);
                         update_step_list(data, pmodel);
                         break;
@@ -277,10 +290,10 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                         break;
                     }
                 }
-            } else if (event.event == LV_EVENT_VALUE_CHANGED) {
-                switch (event.data.id) {
+            } else if (lv_event_get_code(event.as.lvgl) == LV_EVENT_VALUE_CHANGED) {
+                switch (objdata->id) {
                     case BTNMATRIX_ID: {
-                        switch (event.value) {
+                        switch (lv_btnmatrix_get_selected_btn(target)) {
                             case STEP_BTNMX_INSERT: {
                                 create_step_type_blanket(pmodel, data);
                                 data->future_pos = data->selected_step;
@@ -309,12 +322,12 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                             }
 
                             case STEP_BTNMX_CONFIRM: {
-                                size_t *extra  = malloc(sizeof(size_t) * 2);
-                                extra[0]       = data->num_prog;
-                                extra[1]       = data->selected_step;
-                                msg.vmsg.code  = VIEW_PAGE_MESSAGE_CODE_CHANGE_PAGE_EXTRA;
-                                msg.vmsg.extra = extra;
-                                msg.vmsg.page  = (void *)&page_step;
+                                size_t *extra                      = malloc(sizeof(size_t) * 2);
+                                extra[0]                           = data->num_prog;
+                                extra[1]                           = data->selected_step;
+                                msg.stack_msg.tag                  = PMAN_STACK_MSG_TAG_CHANGE_PAGE_EXTRA;
+                                msg.stack_msg.as.destination.extra = extra;
+                                msg.stack_msg.as.destination.page  = (void *)&page_step;
                                 break;
                             }
 
@@ -343,14 +356,14 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                     }
 
                     case LINGUA_DDLIST_ID: {
-                        data->lingua = event.value;
+                        data->lingua = lv_dropdown_get_selected(target);
                         lv_textarea_set_text(data->ltitle,
                                              model_get_program(pmodel, data->num_prog)->nomi[data->lingua]);
                         break;
                     }
                 }
-            } else if (event.event == LV_EVENT_CANCEL) {
-                switch (event.data.id) {
+            } else if (lv_event_get_code(event.as.lvgl) == LV_EVENT_CANCEL) {
+                switch (objdata->id) {
                     case NAME_KB_ID: {
                         lv_textarea_set_text(data->ltitle,
                                              model_get_program(pmodel, data->num_prog)->nomi[data->lingua]);
@@ -358,10 +371,12 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                         break;
                     }
                 }
-            } else if (event.event == LV_EVENT_READY) {
-                switch (event.data.id) {
+            } else if (lv_event_get_code(event.as.lvgl) == LV_EVENT_READY) {
+                switch (objdata->id) {
                     case NAME_KB_ID: {
-                        strcpy(model_get_program(pmodel, data->num_prog)->nomi[data->lingua], event.string_value);
+                        lv_obj_t *ta = lv_keyboard_get_textarea(target);
+
+                        strcpy(model_get_program(pmodel, data->num_prog)->nomi[data->lingua], lv_textarea_get_text(ta));
                         lv_obj_add_flag(data->kbname, LV_OBJ_FLAG_HIDDEN);
                         model_mark_program_to_save(pmodel, data->num_prog);
                         break;
@@ -387,9 +402,8 @@ void destroy_page(void *data, void *extra) {
 
 const pman_page_t page_program = {
     .create        = create_page,
-    .close         = view_close_all,
+    .close         = pman_close_all,
     .destroy       = destroy_page,
     .process_event = process_page_event,
     .open          = open_page,
 };
-#endif

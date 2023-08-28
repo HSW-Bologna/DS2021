@@ -1,4 +1,3 @@
-#if 0
 #include "lvgl.h"
 #include "view/view.h"
 #include "gel/pagemanager/page_manager.h"
@@ -20,11 +19,13 @@ struct page_data {
     lv_obj_t *kb;
     lv_obj_t *com_btn;
     lv_obj_t *com_led;
+
+    view_controller_message_t cmsg;
 };
 
 
-static void *create_page(model_t *pmodel, void *extra) {
-    (void)pmodel;
+static void *create_page(pman_handle_t handle, void *extra) {
+    (void)handle;
     (void)extra;
     return malloc(sizeof(struct page_data));
 }
@@ -41,8 +42,11 @@ static void update_communication(model_t *pmodel, struct page_data *data) {
 }
 
 
-static void open_page(model_t *pmodel, void *arg) {
-    struct page_data *data = arg;
+static void open_page(pman_handle_t handle, void *state) {
+    struct page_data *data = state;
+
+    model_updater_t updater = pman_get_user_data(handle);
+    model_t        *pmodel  = (model_t *)model_updater_get(updater);
 
     view_common_create_title(lv_scr_act(), view_intl_get_string(pmodel, STRINGS_IMPOSTAZIONI), BACK_BTN_ID);
 
@@ -104,55 +108,64 @@ static void open_page(model_t *pmodel, void *arg) {
 }
 
 
-static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_t event) {
-    view_message_t    msg  = VIEW_NULL_MESSAGE;
-    struct page_data *data = arg;
+static pman_msg_t process_page_event(pman_handle_t handle, void *state, pman_event_t event) {
+    pman_msg_t    msg  = PMAN_MSG_NULL;
+    struct page_data *data = state;
 
-    switch (event.code) {
-        case VIEW_EVENT_CODE_TIMER:
-            break;
+    model_updater_t updater = pman_get_user_data(handle);
+    model_t        *pmodel  = (model_t *)model_updater_get(updater);
 
-        case VIEW_EVENT_CODE_ALARM:
-            update_communication(pmodel, data);
-            break;
+    data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_NOTHING;
+    msg.user_msg    = &data->cmsg;
 
-        case VIEW_EVENT_CODE_LVGL:
-            if (event.event == LV_EVENT_CLICKED) {
-                switch (event.data.id) {
+    switch (event.tag) {
+        case PMAN_EVENT_TAG_LVGL: {
+            lv_obj_t           *target  = lv_event_get_current_target(event.as.lvgl);
+            view_object_data_t *objdata = lv_obj_get_user_data(target);
+
+            if (lv_event_get_code(event.as.lvgl) == LV_EVENT_CLICKED) {
+                switch (objdata->id) {
                     case BACK_BTN_ID:
-                        msg.vmsg.code = VIEW_PAGE_MESSAGE_CODE_BACK;
+                        msg.stack_msg.tag = PMAN_STACK_MSG_TAG_BACK;
                         break;
 
                     case NAME_TA_ID:
                         lv_obj_clear_flag(data->kb, LV_OBJ_FLAG_HIDDEN);
                         break;
                 }
-            } else if (event.event == LV_EVENT_VALUE_CHANGED) {
-                switch (event.data.id) {
+        } else if (lv_event_get_code(event.as.lvgl) == LV_EVENT_VALUE_CHANGED) {
+                switch (objdata->id) {
                     case ACCESS_LEVEL_DD_ID:
                         model_mark_parmac_to_save(pmodel);
-                        model_set_access_level_code(pmodel, event.value);
+                        model_set_access_level_code(pmodel, lv_dropdown_get_selected(target));
                         break;
 
                     case COM_ENABLE_ID:
-                        msg.cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_TOGGLE_COMMUNICATION;
+                        data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_TOGGLE_COMMUNICATION;
                         break;
                 }
-            } else if (event.event == LV_EVENT_CANCEL) {
-                switch (event.data.id) {
+            } else if (lv_event_get_code(event.as.lvgl) == LV_EVENT_CANCEL) {
+                switch (objdata->id) {
                     case KEYBOARD_ID:
                         lv_obj_add_flag(data->kb, LV_OBJ_FLAG_HIDDEN);
                         break;
                 }
-            } else if (event.event == LV_EVENT_READY) {
-                switch (event.data.id) {
-                    case KEYBOARD_ID:
+            } else if (lv_event_get_code(event.as.lvgl) == LV_EVENT_READY) {
+                switch (objdata->id) {
+                    case KEYBOARD_ID: {
+                        lv_obj_t *ta = lv_keyboard_get_textarea(target);
                         lv_obj_add_flag(data->kb, LV_OBJ_FLAG_HIDDEN);
-                        strcpy(pmodel->configuration.parmac.nome, event.string_value);
+                        strcpy(pmodel->configuration.parmac.nome, lv_textarea_get_text(ta));
                         model_mark_parmac_to_save(pmodel);
                         break;
+                                      }
                 }
             }
+            break;
+                                   }
+
+        case PMAN_EVENT_TAG_USER:
+            update_communication(pmodel, data);
             break;
 
         default:
@@ -165,10 +178,9 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
 
 
 const pman_page_t page_tech_settings = {
-    .close         = view_close_all,
-    .destroy       = view_destroy_all,
+    .close         = pman_close_all,
+    .destroy       = pman_destroy_all,
     .process_event = process_page_event,
     .open          = open_page,
     .create        = create_page,
 };
-#endif

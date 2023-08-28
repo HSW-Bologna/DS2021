@@ -1,10 +1,11 @@
-#if 0
 #include <stdio.h>
+#include "extra/widgets/keyboard/lv_keyboard.h"
 #include "lvgl.h"
 #include "view/view.h"
 #include "gel/pagemanager/page_manager.h"
 #include "view/common.h"
 #include "view/intl/intl.h"
+#include "view/view_types.h"
 
 
 enum {
@@ -23,8 +24,10 @@ struct page_data {
     lv_obj_t *netlist;
     lv_obj_t *kb;
 
-    size_t      selected_network;
-    lv_timer_t *timer;
+    size_t        selected_network;
+    pman_timer_t *timer;
+
+    view_controller_message_t cmsg;
 };
 
 
@@ -93,18 +96,19 @@ static void update_data(model_t *pmodel, struct page_data *data) {
 }
 
 
-static void *create_page(model_t *pmodel, void *extra) {
-    (void)pmodel;
+static void *create_page(pman_handle_t handle, void *extra) {
     (void)extra;
     struct page_data *data = malloc(sizeof(struct page_data));
-    data->timer            = view_register_periodic_timer(10000UL, SCAN_TIMER_ID);
+    data->timer            = PMAN_REGISTER_TIMER_ID(handle, 10000UL, SCAN_TIMER_ID);
     return data;
 }
 
 
-static void open_page(model_t *pmodel, void *arg) {
-    (void)pmodel;
-    struct page_data *data = arg;
+static void open_page(pman_handle_t handle, void *state) {
+    struct page_data *data = state;
+
+    model_updater_t updater = pman_get_user_data(handle);
+    model_t        *pmodel  = (model_t *)model_updater_get(updater);
 
     view_common_create_title(lv_scr_act(), view_intl_get_string(pmodel, STRINGS_IMPOSTAZIONI_DI_RETE), BACK_BTN_ID);
 
@@ -124,71 +128,95 @@ static void open_page(model_t *pmodel, void *arg) {
 
     update_network_list(data, pmodel->system.networks, pmodel->system.num_networks);
     update_data(pmodel, data);
-    lv_timer_resume(data->timer);
+    pman_timer_resume(data->timer);
 }
 
 
-static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_t event) {
-    view_message_t    msg  = VIEW_NULL_MESSAGE;
-    struct page_data *data = arg;
+static pman_msg_t process_page_event(pman_handle_t handle, void *state, pman_event_t event) {
+    pman_msg_t        msg  = PMAN_MSG_NULL;
+    struct page_data *data = state;
 
-    switch (event.code) {
-        case VIEW_EVENT_CODE_TIMER:
-            msg.cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_WIFI_SCAN;
+    model_updater_t updater = pman_get_user_data(handle);
+    model_t        *pmodel  = (model_t *)model_updater_get(updater);
+
+    data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_NOTHING;
+    msg.user_msg    = &data->cmsg;
+
+    switch (event.tag) {
+        case PMAN_EVENT_TAG_TIMER:
+            data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_WIFI_SCAN;
             break;
 
-        case VIEW_EVENT_CODE_WIFI:
-            update_network_list(data, pmodel->system.networks, pmodel->system.num_networks);
-            update_data(pmodel, data);
-            break;
+        case VIEW_EVENT_CODE_LVGL: {
+            lv_obj_t           *target  = lv_event_get_current_target(event.as.lvgl);
+            view_object_data_t *objdata = lv_obj_get_user_data(target);
 
-        case VIEW_EVENT_CODE_IO_DONE:
-            if (event.error) {
-                view_common_io_error_toast(pmodel);
-            } else {
-                view_common_toast(view_intl_get_string(pmodel, STRINGS_CONFIGURAZIONE_SALVATA));
-            }
-            break;
+            if (lv_event_get_code(event.as.lvgl) == LV_EVENT_CLICKED) {
 
-        case VIEW_EVENT_CODE_LVGL:
-            if (event.event == LV_EVENT_CLICKED) {
-                switch (event.data.id) {
+                switch (objdata->id) {
                     case BACK_BTN_ID:
-                        msg.vmsg.code = VIEW_PAGE_MESSAGE_CODE_BACK;
+                        msg.stack_msg.tag = PMAN_STACK_MSG_TAG_BACK;
                         break;
 
                     case WIFI_BTN_ID:
-                        data->selected_network = event.data.number;
+                        data->selected_network = objdata->number;
                         data->kb               = create_password_kb(lv_scr_act(), pmodel);
                         break;
 
                     case SAVE_BTN_ID:
-                        msg.cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_SAVE_WIFI_CONFIG;
+                        data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_SAVE_WIFI_CONFIG;
                         break;
 
                     default:
                         break;
                 }
-            } else if (event.event == LV_EVENT_CANCEL) {
-                switch (event.data.id) {
+            } else if (lv_event_get_code(event.as.lvgl) == LV_EVENT_CANCEL) {
+                switch (objdata->id) {
                     case PASSWORD_KB_ID:
                         lv_obj_del(data->kb);
                         data->kb = NULL;
                         break;
                 }
-            } else if (event.data.id) {
-                switch (event.data.id) {
+            } else if (objdata->id) {
+                switch (objdata->id) {
                     case PASSWORD_KB_ID:
                         lv_obj_del(data->kb);
                         data->kb = NULL;
 
-                        msg.cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_CONNECT_TO_WIFI_NETWORK;
-                        strcpy(msg.cmsg.ssid, pmodel->system.networks[data->selected_network].ssid);
-                        strcpy(msg.cmsg.psk, event.string_value);
+                        lv_obj_t *ta = lv_keyboard_get_textarea(target);
+
+                        data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_CONNECT_TO_WIFI_NETWORK;
+                        strcpy(data->cmsg.ssid, pmodel->system.networks[data->selected_network].ssid);
+                        strcpy(data->cmsg.psk, lv_textarea_get_text(ta));
                         break;
                 }
             }
+        } break;
+
+        case PMAN_EVENT_TAG_USER: {
+            view_event_t *user_event = event.as.user;
+
+            switch (user_event->code) {
+                case VIEW_EVENT_CODE_WIFI:
+                    update_network_list(data, pmodel->system.networks, pmodel->system.num_networks);
+                    update_data(pmodel, data);
+                    break;
+
+                case VIEW_EVENT_CODE_IO_DONE:
+                    if (user_event->error) {
+                        view_common_io_error_toast(pmodel);
+                    } else {
+                        view_common_toast(view_intl_get_string(pmodel, STRINGS_CONFIGURAZIONE_SALVATA));
+                    }
+                    break;
+
+                default:
+                    break;
+            }
+
             break;
+        }
+
 
         default:
             break;
@@ -199,16 +227,16 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
 
 
 
-static void destroy_page(void *arg, void *extra) {
-    struct page_data *data = arg;
-    lv_timer_del(data->timer);
+static void destroy_page(void *state, void *extra) {
+    struct page_data *data = state;
+    pman_timer_delete(data->timer);
     free(data);
 }
 
 
-static void close_page(void *arg) {
-    struct page_data *data = arg;
-    lv_timer_pause(data->timer);
+static void close_page(void *state) {
+    struct page_data *data = state;
+    pman_timer_pause(data->timer);
     lv_obj_clean(lv_scr_act());
 }
 
@@ -220,4 +248,3 @@ const pman_page_t page_network = {
     .close         = close_page,
     .destroy       = destroy_page,
 };
-#endif

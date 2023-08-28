@@ -1,4 +1,3 @@
-#if 0
 #include <stdio.h>
 #include <stdlib.h>
 #include "lvgl.h"
@@ -44,11 +43,13 @@ struct page_data {
         uint16_t  inputs;
         lv_obj_t *leds[NUM_INPUTS];
     } input;
+
+    view_controller_message_t cmsg;
 };
 
 
-static void *create_page(model_t *pmodel, void *extra) {
-    (void)pmodel;
+static void *create_page(pman_handle_t handle, void *extra) {
+    (void)handle;
     (void)extra;
     return (struct page_data *)malloc(sizeof(struct page_data));
 }
@@ -206,10 +207,13 @@ static void update_output_state(model_t *pmodel, struct page_data *data) {
 }
 
 
-static void open_page(model_t *pmodel, void *arg) {
-    (void)pmodel;
-    struct page_data *data = arg;
+static void open_page(pman_handle_t handle, void *state) {
+    (void)handle;
+    struct page_data *data = state;
     data->blanket          = NULL;
+
+    model_updater_t updater = pman_get_user_data(handle);
+    model_t *pmodel = (model_t *)model_updater_get(updater);
 
     lv_obj_t *tab = custom_tabview_create(lv_scr_act(), LV_DIR_TOP, 50);
 
@@ -237,14 +241,23 @@ static void open_page(model_t *pmodel, void *arg) {
 }
 
 
-static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_t event) {
-    view_message_t    msg  = VIEW_NULL_MESSAGE;
-    struct page_data *data = arg;
+static pman_msg_t process_page_event(pman_handle_t handle, void *state, pman_event_t event) {
+    pman_msg_t    msg  = PMAN_MSG_NULL;
+    struct page_data *data = state;
 
-    switch (event.code) {
+    model_updater_t updater = pman_get_user_data(handle);
+    model_t *pmodel = (model_t *)model_updater_get(updater);
+
+    data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_NOTHING;
+    msg.user_msg = &data->cmsg;
+
+    switch (event.tag) {
+        case PMAN_EVENT_TAG_USER: {
+            view_event_t *user_event = event.as.user;
+            switch (user_event->code) {
         case VIEW_EVENT_CODE_STATE_CHANGED:
             if (!model_is_in_test(pmodel)) {
-                msg.vmsg.code = VIEW_PAGE_MESSAGE_CODE_BACK;
+                msg.stack_msg.tag = PMAN_STACK_MSG_TAG_BACK;
             } else {
                 update_output_state(pmodel, data);
             }
@@ -254,51 +267,8 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
             update_sensors(pmodel, data);
             break;
 
-        case VIEW_EVENT_CODE_LVGL: {
-            if (event.event == LV_EVENT_CLICKED) {
-                switch (event.data.id) {
-                    case BACK_BTN_ID:
-                        msg.cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_EXIT_TEST;
-                        break;
-
-                    case CLEAR_COINS_BTN_ID:
-                        msg.cmsg.code = VIEW_CONTROLLER_MESSAGE_CLEAR_COINS;
-                        break;
-
-                    case LED_BTN_ID: {
-                        msg.cmsg.code = VIEW_CONTROLLER_MESSAGE_TEST_RELE;
-                        msg.cmsg.rele = event.data.number;
-                        msg.cmsg.value =
-                            lv_led_get_brightness(data->output.leds[event.data.number]) <= LV_LED_BRIGHT_MIN;
-                        update_output_leds(pmodel, data, event.data.number);
-                        break;
-                    }
-
-                    case RETRY_COMM_BTN_ID:
-                        msg.cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_TOGGLE_COMMUNICATION;
-                        break;
-
-                    case DISABLE_COMM_BTN_ID:
-                        model_set_machine_communication(pmodel, 0);
-                        lv_obj_del(data->blanket);
-                        data->blanket = NULL;
-                        break;
-                }
-            } else if (event.event == LV_EVENT_RELEASED) {
-                switch (event.data.id) {
-                    case PWM_SLIDER_ID: {
-                        msg.cmsg.code  = VIEW_CONTROLLER_MESSAGE_CODE_TEST_PWM;
-                        msg.cmsg.pwm   = event.data.number;
-                        msg.cmsg.speed = event.value;
-                        break;
-                    }
-                }
-            }
-            break;
-        }
-
         case VIEW_EVENT_CODE_TEST_INPUT_VALUES: {
-            data->input.inputs = event.digital_inputs;
+            data->input.inputs = user_event->digital_inputs;
             update_input_leds(pmodel, data);
             break;
         }
@@ -316,6 +286,59 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
                 data->blanket = NULL;
             }
             break;
+            
+        default:
+            break;
+
+            }
+            break;
+                                     }
+
+        case PMAN_EVENT_TAG_LVGL: {
+            lv_obj_t *target = lv_event_get_current_target(event.as.lvgl);
+            view_object_data_t *objdata = lv_obj_get_user_data(target);
+
+            if (lv_event_get_code(event.as.lvgl) == LV_EVENT_CLICKED) {
+                switch (objdata->id) {
+                    case BACK_BTN_ID:
+                        data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_EXIT_TEST;
+                        break;
+
+                    case CLEAR_COINS_BTN_ID:
+                        data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CLEAR_COINS;
+                        break;
+
+                    case LED_BTN_ID: {
+                        data->cmsg.code = VIEW_CONTROLLER_MESSAGE_TEST_RELE;
+                        data->cmsg.rele = objdata->number;
+                        data->cmsg.value =
+                            lv_led_get_brightness(data->output.leds[objdata->number]) <= LV_LED_BRIGHT_MIN;
+                        update_output_leds(pmodel, data, objdata->number);
+                        break;
+                    }
+
+                    case RETRY_COMM_BTN_ID:
+                        data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_TOGGLE_COMMUNICATION;
+                        break;
+
+                    case DISABLE_COMM_BTN_ID:
+                        model_set_machine_communication(pmodel, 0);
+                        lv_obj_del(data->blanket);
+                        data->blanket = NULL;
+                        break;
+                }
+            } else if (lv_event_get_code(event.as.lvgl) == LV_EVENT_RELEASED) {
+                switch (objdata->id) {
+                    case PWM_SLIDER_ID: {
+                        data->cmsg.code  = VIEW_CONTROLLER_MESSAGE_CODE_TEST_PWM;
+                        data->cmsg.pwm   = objdata->number;
+                        data->cmsg.speed = lv_slider_get_value(target);
+                        break;
+                    }
+                }
+            }
+            break;
+        }
 
         default:
             break;
@@ -328,9 +351,8 @@ static view_message_t process_page_event(model_t *pmodel, void *arg, view_event_
 
 const pman_page_t page_test = {
     .create        = create_page,
-    .close         = view_close_all,
-    .destroy       = view_destroy_all,
+    .close         = pman_close_all,
+    .destroy       = pman_destroy_all,
     .process_event = process_page_event,
     .open          = open_page,
 };
-#endif

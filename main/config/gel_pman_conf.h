@@ -4,6 +4,7 @@
 #include "model/model.h"
 #include "view/view_types.h"
 
+#if 0
 /*
  * Page manager
  */
@@ -20,6 +21,7 @@ typedef void *pman_page_data_t;
 typedef model_t *pman_model_t;
 
 typedef void pman_view_t;
+#endif
 
 
 #endif
