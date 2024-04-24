@@ -177,7 +177,7 @@ static pman_msg_t process_page_event(pman_handle_t handle, void *state, pman_eve
                         data->kb = NULL;
                         break;
                 }
-            } else if (objdata->id) {
+            } else if (lv_event_get_code(event.as.lvgl) == LV_EVENT_READY) {
                 switch (objdata->id) {
                     case PASSWORD_KB_ID:
                         lv_obj_del(data->kb);

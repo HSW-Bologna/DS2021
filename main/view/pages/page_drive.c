@@ -17,12 +17,15 @@ enum {
     IMPORT_CONFIRM_BTN_ID,
     CANCEL_BTN_ID,
     LIST_ITEM_ID,
+    BTN_FIRMWARE_UPDATE_ID,
+    FIRMWARE_CONFIRM_BTN_ID,
 };
 
 
 struct page_data {
     lv_obj_t *blanket;
     lv_obj_t *import_btn;
+    lv_obj_t *btn_update;
     lv_obj_t *list;
     size_t    selected_archive;
 
@@ -82,14 +85,20 @@ static void update_buttons(struct page_data *data, model_t *pmodel) {
     } else {
         lv_obj_add_state(data->import_btn, LV_STATE_DISABLED);
     }
+
+    if (pmodel->system.firmware_update_ready > 0) {
+        lv_obj_clear_state(data->btn_update, LV_STATE_DISABLED);
+    } else {
+        lv_obj_add_state(data->btn_update, LV_STATE_DISABLED);
+    }
 }
 
 
 static void open_page(pman_handle_t handle, void *arg) {
     struct page_data *data = arg;
 
-    model_updater_t   updater = pman_get_user_data(handle);
-    model_t          *pmodel  = (model_t *)model_updater_get(updater);
+    model_updater_t updater = pman_get_user_data(handle);
+    model_t        *pmodel  = (model_t *)model_updater_get(updater);
 
     view_common_create_title(lv_scr_act(), view_intl_get_string(pmodel, STRINGS_GESTIONE_CHIAVETTA_ESTERNA),
                              BACK_BTN_ID);
@@ -111,54 +120,64 @@ static void open_page(pman_handle_t handle, void *arg) {
     lv_obj_align_to(btn, prev, LV_ALIGN_OUT_BOTTOM_MID, 0, 20);
     view_register_object_default_callback(btn, IMPORT_BTN_ID);
     data->import_btn = btn;
+    prev             = btn;
+
+    btn = lv_btn_create(lv_scr_act());
+    lbl = lv_label_create(btn);
+    lv_label_set_long_mode(lbl, LV_LABEL_LONG_WRAP);
+    lv_label_set_text(lbl, view_intl_get_string(pmodel, STRINGS_AGGIORNA_FIRMWARE));
+    lv_obj_set_size(btn, 420, 100);
+    lv_obj_align_to(btn, prev, LV_ALIGN_OUT_BOTTOM_MID, 0, 20);
+    view_register_object_default_callback(btn, BTN_FIRMWARE_UPDATE_ID);
+    data->btn_update = btn;
 
     lv_obj_t *img = lv_img_create(lv_scr_act());
     lv_img_set_src(img, &img_thumb_drive);
-    lv_obj_align(img, LV_ALIGN_RIGHT_MID, -80, 0);
+    lv_obj_align(img, LV_ALIGN_RIGHT_MID, -40, 0);
 
     update_buttons(data, pmodel);
 }
 
 
 static pman_msg_t process_page_event(pman_handle_t handle, void *arg, pman_event_t event) {
-    pman_msg_t    msg  = PMAN_MSG_NULL;
+    pman_msg_t        msg  = PMAN_MSG_NULL;
     struct page_data *data = arg;
 
     data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_NOTHING;
     msg.user_msg    = &data->cmsg;
 
-    model_updater_t   updater = pman_get_user_data(handle);
-    model_t          *pmodel  = (model_t *)model_updater_get(updater);
+    model_updater_t updater = pman_get_user_data(handle);
+    model_t        *pmodel  = (model_t *)model_updater_get(updater);
 
     switch (event.tag) {
         case PMAN_EVENT_TAG_USER: {
-                                      view_event_t *user_event = event.as.user;
-                                      switch (user_event->code) {
-        case VIEW_EVENT_CODE_DRIVE:
-            if (!model_is_drive_mounted(pmodel)) {
-                msg.stack_msg.tag = PMAN_STACK_MSG_TAG_BACK;
-            } else {
-                update_buttons(data, pmodel);
+            view_event_t *user_event = event.as.user;
+            switch (user_event->code) {
+                case VIEW_EVENT_CODE_DRIVE:
+                    if (!model_is_drive_mounted(pmodel)) {
+                        msg.stack_msg.tag = PMAN_STACK_MSG_TAG_BACK;
+                    } else {
+                        update_buttons(data, pmodel);
+                    }
+                    break;
+
+                case VIEW_EVENT_CODE_IO_DONE:
+                    if (data->blanket != NULL) {
+                        lv_obj_del(data->blanket);
+                    }
+                    data->blanket = NULL;
+                    update_buttons(data, pmodel);
+
+                    if (user_event->error) {
+                        view_common_io_error_toast(pmodel);
+                    }
+                    break;
+
+                default:
+                    break;
             }
             break;
-
-        case VIEW_EVENT_CODE_IO_DONE:
-            if (data->blanket != NULL) {
-                lv_obj_del(data->blanket);
-            }
-            data->blanket = NULL;
-            update_buttons(data, pmodel);
-
-            if (user_event->error) {
-                view_common_io_error_toast(pmodel) ;
-            }
-            break;
-
-        default:
-            break;
-                                  }
-            break;
-    }
+        }
 
         case PMAN_EVENT_TAG_LVGL: {
             lv_obj_t           *target  = lv_event_get_current_target(event.as.lvgl);
@@ -195,7 +214,7 @@ static pman_msg_t process_page_event(pman_handle_t handle, void *arg, pman_event
                             lv_obj_del(data->blanket);
                         }
                         data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_EXPORT_CURRENT_MACHINE;
-                        data->blanket = view_common_create_blanket(lv_scr_act());
+                        data->blanket   = view_common_create_blanket(lv_scr_act());
                         break;
 
                     case EXPORT_BTN_ID:
@@ -206,7 +225,7 @@ static pman_msg_t process_page_event(pman_handle_t handle, void *arg, pman_event
                             data->blanket = lv_obj_get_parent(popup);
                         } else {
                             data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_EXPORT_CURRENT_MACHINE;
-                            data->blanket = view_common_create_blanket(lv_scr_act());
+                            data->blanket   = view_common_create_blanket(lv_scr_act());
                         }
                         break;
 
@@ -217,10 +236,26 @@ static pman_msg_t process_page_event(pman_handle_t handle, void *arg, pman_event
                         data->blanket = lv_obj_get_parent(popup);
                         break;
                     }
+
+                    case BTN_FIRMWARE_UPDATE_ID: {
+                        lv_obj_t *popup = view_common_create_choice_popup(
+                            lv_scr_act(), 1, view_intl_get_string(pmodel, STRINGS_AGGIORNARE_FIRMWARE), LV_SYMBOL_OK,
+                            FIRMWARE_CONFIRM_BTN_ID, LV_SYMBOL_CLOSE, CANCEL_BTN_ID);
+                        data->blanket = lv_obj_get_parent(popup);
+                        break;
+                    }
+
+                    case FIRMWARE_CONFIRM_BTN_ID:
+                        if (data->blanket != NULL) {
+                            lv_obj_del(data->blanket);
+                        }
+                        data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_FIRMWARE_UPDATE;
+                        data->blanket   = view_common_create_blanket(lv_scr_act());
+                        break;
                 }
             }
             break;
-                                  }
+        }
 
         default:
             break;

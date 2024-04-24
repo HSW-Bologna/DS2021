@@ -35,13 +35,33 @@ void model_init(model_t *pmodel) {
     pmodel->run.program_number = 0;
     pmodel->run.step_number    = 0;
 
-    pmodel->system.networks           = 0;
-    pmodel->system.num_networks       = 0;
-    pmodel->system.connected          = 0;
-    pmodel->system.drive_machines     = NULL;
-    pmodel->system.num_drive_machines = 0;
+    pmodel->system.networks              = 0;
+    pmodel->system.num_networks          = 0;
+    pmodel->system.connected             = 0;
+    pmodel->system.drive_machines        = NULL;
+    pmodel->system.num_drive_machines    = 0;
+    pmodel->system.firmware_update_ready = 0;
 
     parmac_init(pmodel);
+}
+
+
+uint8_t model_get_speed_in_percentage(model_t *pmodel, uint16_t speed) {
+    assert(pmodel != NULL);
+
+    if (speed < pmodel->configuration.parmac.velocita_minima) {
+        return 0;
+    } else {
+        uint16_t total_speed_range =
+            pmodel->configuration.parmac.velocita_massima - pmodel->configuration.parmac.velocita_minima;
+        return (uint8_t)(((speed - pmodel->configuration.parmac.velocita_minima) * 100) / total_speed_range);
+    }
+}
+
+
+uint8_t model_should_display_humidity(model_t *pmodel) {
+    assert(pmodel != NULL);
+    return pmodel->configuration.parmac.tipo_sonda_temperatura == SONDA_TEMPERATURA_SHT;
 }
 
 
@@ -729,7 +749,7 @@ int model_is_any_alarm_active(model_t *pmodel) {
 
 int model_get_worst_alarm(model_t *pmodel, alarm_code_t *code, uint16_t exclude_mask) {
     assert(pmodel != NULL);
-    for (size_t i = 0; i < sizeof(pmodel->machine.alarms); i++) {
+    for (size_t i = 0; i < sizeof(pmodel->machine.alarms) * 8; i++) {
         if ((exclude_mask & (1 << i)) > 0) {
             continue;
         }

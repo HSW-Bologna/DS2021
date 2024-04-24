@@ -21,6 +21,13 @@
 #define REQUEST_SOCKET_PATH  "/tmp/.application_disk_request_socket"
 #define RESPONSE_SOCKET_PATH "/tmp/.application_disk_response_socket"
 #define MOUNT_ATTEMPTS       5
+#define APP_UPDATE           "/tmp/mnt/DS2021.bin"
+
+#ifdef TARGET_DEBUG
+#define TEMPORARY_APP "./newapp"
+#else
+#define TEMPORARY_APP "/root/newapp"
+#endif
 
 
 typedef struct {
@@ -41,6 +48,7 @@ typedef enum {
     DISK_OP_MESSAGE_CODE_READ_FILE,
     DISK_OP_MESSAGE_CODE_EXPORT_CURRENT_MACHINE,
     DISK_OP_MESSAGE_CODE_IMPORT_CURRENT_MACHINE,
+    DISK_OP_MESSAGE_CODE_FIRMWARE_UPDATE,
 } disk_op_message_code_t;
 
 
@@ -204,6 +212,11 @@ void disk_op_save_wifi_config(disk_op_callback_t cb, disk_op_error_callback_t er
 }
 
 
+void disk_op_firmware_update(disk_op_callback_t cb, disk_op_error_callback_t errcb, void *arg) {
+    simple_request(DISK_OP_MESSAGE_CODE_FIRMWARE_UPDATE, cb, errcb, arg);
+}
+
+
 void disk_op_read_file(char *name, disk_op_callback_t cb, disk_op_error_callback_t errcb, void *arg) {
     size_t len       = strlen(name) + 1;
     char  *file_name = malloc(len);
@@ -265,8 +278,16 @@ int disk_op_manage_response(model_t *pmodel) {
 }
 
 
+int disk_op_is_firmware_present(void) {
+    return storage_is_file(APP_UPDATE);
+}
+
+
 static void *disk_interaction_task(void *args) {
     unsigned int mount_attempts = 0;
+
+    storage_create_dir(DEFAULT_PROGRAMS_PATH);
+    storage_create_dir(DEFAULT_PARAMS_PATH);
 
     for (;;) {
         disk_op_message_t msg;
@@ -365,6 +386,11 @@ static void *disk_interaction_task(void *args) {
 
                 case DISK_OP_MESSAGE_CODE_SAVE_WIFI_CONFIG:
                     response.error = wifi_save_config();
+                    socketq_send(&responseq, (uint8_t *)&response);
+                    break;
+
+                case DISK_OP_MESSAGE_CODE_FIRMWARE_UPDATE:
+                    response.error = storage_update_temporary_firmware(APP_UPDATE, TEMPORARY_APP);
                     socketq_send(&responseq, (uint8_t *)&response);
                     break;
             }

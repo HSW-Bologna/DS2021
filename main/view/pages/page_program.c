@@ -49,6 +49,9 @@ struct page_data {
 };
 
 
+static void update_page(model_t *pmodel, struct page_data *pdata);
+
+
 static void create_step_type_blanket(model_t *pmodel, struct page_data *data) {
     data->blanket = view_common_create_blanket(lv_scr_act());
     view_register_object_default_callback(data->blanket, BLANKET_ID);
@@ -99,6 +102,8 @@ static void update_step_list(struct page_data *data, model_t *pmodel) {
     } else {
         lv_btnmatrix_set_btn_ctrl(data->btnmx, STEP_BTNMX_INSERT, LV_BTNMATRIX_CTRL_DISABLED);
     }
+
+    update_page(pmodel, data);
 }
 
 
@@ -171,7 +176,7 @@ static void open_page(pman_handle_t handle, void *arg) {
     lv_obj_align(l, LV_ALIGN_TOP_LEFT, 8, 80);
 
     l = lv_label_create(lv_scr_act());
-    lv_obj_align(l, LV_ALIGN_TOP_LEFT, 78, 80);
+    lv_obj_align(l, LV_ALIGN_TOP_LEFT, 100, 80);
     data->ldurata = l;
 
     l = lv_label_create(lv_scr_act());
@@ -182,6 +187,8 @@ static void open_page(pman_handle_t handle, void *arg) {
     view_register_object_default_callback(ddlist, TYPE_DDLIST_ID);
     lv_obj_set_width(ddlist, 245);
     lv_obj_align(ddlist, LV_ALIGN_TOP_LEFT, 70, 120);
+
+    memset(options, 0, sizeof(options));
 
     for (size_t i = 0; i < NUM_DRYER_PROGRAM_STEP_TYPES; i++) {
         strcat(options, parameters_tipi_step[i][data->lingua]);
@@ -268,13 +275,14 @@ static pman_msg_t process_page_event(pman_handle_t handle, void *arg, pman_event
                         break;
 
                     case TYPE_BTN_ID:
+                        program_insert_step(model_get_program(pmodel, data->num_prog), objdata->number,
+                                            data->future_pos);
+                        model_mark_program_to_save(pmodel, data->num_prog);
+                        update_step_list(data, pmodel);
                         if (data->blanket != NULL) {
                             lv_obj_del(data->blanket);
                             data->blanket = NULL;
                         }
-                        program_insert_step(model_get_program(pmodel, data->num_prog), objdata->number,
-                                            data->future_pos);
-                        update_step_list(data, pmodel);
                         break;
 
                     case BLANKET_ID:
@@ -391,6 +399,12 @@ static pman_msg_t process_page_event(pman_handle_t handle, void *arg, pman_event
     }
 
     return msg;
+}
+
+
+static void update_page(model_t *pmodel, struct page_data *pdata) {
+    unsigned int d = program_get_total_time(model_get_program(pmodel, pdata->num_prog));
+    lv_label_set_text_fmt(pdata->ldurata, "%02im %02is", d / 60, d % 60);
 }
 
 

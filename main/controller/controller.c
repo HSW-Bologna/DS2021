@@ -1,3 +1,5 @@
+#include <linux/reboot.h>
+#include <sys/reboot.h>
 #include <unistd.h>
 #include "controller.h"
 #include "machine/machine.h"
@@ -98,7 +100,7 @@ void controller_manage_message(pman_handle_t handle, void *msg) {
             break;
 
         case VIEW_CONTROLLER_MESSAGE_CODE_READ_LOG_FILE:
-            disk_op_read_file(LOGFILE, disk_io_callback, disk_io_error_callback, NULL);
+            disk_op_read_file(LOGFILE, disk_io_callback, disk_io_error_callback, (void *)(uintptr_t)cmsg->disk_op_id);
             break;
 
         case VIEW_CONTROLLER_MESSAGE_CODE_CLEAR_ALARMS:
@@ -108,7 +110,7 @@ void controller_manage_message(pman_handle_t handle, void *msg) {
         case VIEW_CONTROLLER_MESSAGE_CODE_START_PROGRAM:
             if (!model_is_program_running(pmodel)) {
                 model_start_program(pmodel, cmsg->program);
-                machine_send_step(model_get_current_step(pmodel), model_get_current_program_number(pmodel),
+                machine_send_step(pmodel, model_get_current_step(pmodel), model_get_current_program_number(pmodel),
                                   model_get_current_step_number(pmodel), 1);
                 pending_change = 1;
             } else {
@@ -196,6 +198,11 @@ void controller_manage_message(pman_handle_t handle, void *msg) {
         case VIEW_CONTROLLER_MESSAGE_CODE_SAVE_WIFI_CONFIG:
             disk_op_save_wifi_config(disk_io_callback, disk_io_error_callback, NULL);
             break;
+
+        case VIEW_CONTROLLER_MESSAGE_CODE_FIRMWARE_UPDATE: {
+            disk_op_firmware_update(disk_io_callback, disk_io_error_callback, NULL);
+            break;
+        }
     }
 
     // lv_mem_free(cmsg);
@@ -217,7 +224,8 @@ void controller_manage(model_t *pmodel) {
         machine_refresh_state();
 
         if (model_update_drive_status(pmodel, disk_op_is_drive_mounted())) {
-            pmodel->system.num_drive_machines = disk_op_drive_machines(&pmodel->system.drive_machines);
+            pmodel->system.num_drive_machines    = disk_op_drive_machines(&pmodel->system.drive_machines);
+            pmodel->system.firmware_update_ready = disk_op_is_firmware_present();
             view_event((view_event_t){.code = VIEW_EVENT_CODE_DRIVE});
         }
 
@@ -275,7 +283,7 @@ void controller_manage(model_t *pmodel) {
                 machine_send_parmac(&pmodel->configuration.parmac);
 
                 if (model_pick_up_machine_state(pmodel, msg.state, msg.program_number, msg.step_number)) {
-                    machine_send_step(model_get_current_step(pmodel), model_get_current_program_number(pmodel),
+                    machine_send_step(pmodel, model_get_current_step(pmodel), model_get_current_program_number(pmodel),
                                       model_get_current_step_number(pmodel), pmodel->configuration.parmac.autoavvio);
                     view_event((view_event_t){.code = VIEW_EVENT_CODE_STATE_SYNCED});
                     view_event((view_event_t){.code = VIEW_EVENT_CODE_STATE_CHANGED});
@@ -296,7 +304,8 @@ void controller_manage(model_t *pmodel) {
                 if (model_update_machine_state(pmodel, msg.state, msg.step_type)) {
                     if (model_is_machine_active(pmodel) && !pending_change) {
                         if (model_next_step(pmodel)) {
-                            machine_send_step(model_get_current_step(pmodel), model_get_current_program_number(pmodel),
+                            machine_send_step(pmodel, model_get_current_step(pmodel),
+                                              model_get_current_program_number(pmodel),
                                               model_get_current_step_number(pmodel), old_state != MACHINE_STATE_PAUSED);
                         } else {
                             model_stop_program(pmodel);
@@ -350,6 +359,7 @@ static void load_programs_callback(model_t *pmodel, void *data, void *arg) {
 
     memcpy(pmodel->configuration.programs, list->programs, sizeof(list->programs[0]) * list->num_programs);
     pmodel->configuration.num_programs = list->num_programs;
+    log_info("Caricati %zu programmi", list->num_programs);
     for (size_t i = 0; i < model_get_num_programs(pmodel); i++) {
         dryer_program_t *p = model_get_program(pmodel, i);
         for (size_t j = 0; j < p->num_steps; j++) {
@@ -370,6 +380,16 @@ static void load_password_callback(model_t *pmodel, void *data, void *arg) {
 
 static void disk_io_callback(model_t *pmodel, void *data, void *arg) {
     (void)pmodel;
+    view_event_t event = {.code = VIEW_EVENT_CODE_IO_DONE, .io_data = data, .io_op = (int)(uintptr_t)arg};
+    view_event(event);
+}
+
+
+static void firmware_update_callback(model_t *pmodel, void *data, void *arg) {
+    (void)pmodel;
+#ifndef TARGET_DEBUG
+    reboot(LINUX_REBOOT_CMD_RESTART);
+#endif
     view_event_t event = {.code = VIEW_EVENT_CODE_IO_DONE, .io_data = data, .io_op = (int)(uintptr_t)arg};
     view_event(event);
 }

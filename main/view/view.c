@@ -4,6 +4,7 @@
 #include "config/app_conf.h"
 #include "model/model.h"
 #include "view.h"
+#include "log.h"
 #include "theme/style.h"
 #include "theme/theme.h"
 #include "widgets/custom_tabview.h"
@@ -117,12 +118,11 @@ void view_register_keyboard_plus_minus_callback(lv_obj_t *kb, int id) {
 
 
 static void plus_minus_keyboard_cb(lv_event_t *event) {
-    lv_obj_t           *obj     = lv_event_get_target(event);
-    view_object_data_t *data    = lv_obj_get_user_data(lv_event_get_current_target(event));
-    lv_obj_t           *ta      = lv_keyboard_get_textarea(obj);
+    lv_obj_t           *obj  = lv_event_get_target(event);
+    view_object_data_t *data = lv_obj_get_user_data(lv_event_get_current_target(event));
+    lv_obj_t           *ta   = lv_keyboard_get_textarea(obj);
 
-    /* TODO:
-    pman_event_t        myevent = {.code = VIEW_EVENT_CODE_LVGL, .event = lv_event_get_code(event), .data = *data};
+    view_event_t myevent = {.code = VIEW_EVENT_CODE_LVGL, .event = lv_event_get_code(event), .data = *data};
     if (ta != NULL) {
         myevent.string_value = lv_textarea_get_text(ta);
     }
@@ -141,7 +141,6 @@ static void plus_minus_keyboard_cb(lv_event_t *event) {
         }
     }
     view_event(myevent);
-    */
 }
 
 

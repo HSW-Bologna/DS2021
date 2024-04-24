@@ -13,6 +13,7 @@
 #include "config/app_conf.h"
 #include "utils/system_time.h"
 #include "view/theme/style.h"
+#include "log.h"
 
 
 #define ALARM_DISPLAY_DELAY 2000
@@ -30,8 +31,11 @@ LV_IMG_DECLARE(img_down);
 LV_IMG_DECLARE(img_down_disabled);
 LV_IMG_DECLARE(img_pause);
 LV_IMG_DECLARE(img_stop);
-LV_IMG_DECLARE(img_italiano);
-LV_IMG_DECLARE(img_english);
+LV_IMG_DECLARE(img_ita_sm);
+LV_IMG_DECLARE(img_english_sm);
+LV_IMG_DECLARE(img_espagnol);
+LV_IMG_DECLARE(img_francais);
+LV_IMG_DECLARE(img_german);
 LV_IMG_DECLARE(img_temperature);
 LV_IMG_DECLARE(img_drops);
 LV_IMG_DECLARE(img_speed);
@@ -119,8 +123,8 @@ struct page_data {
 
 
 static const lv_img_dsc_t *languages[NUM_LINGUE] = {
-    &img_italiano,
-    &img_english,
+    &img_ita_sm,
+    &img_english_sm,
 };
 
 
@@ -190,7 +194,7 @@ static void update_menu(model_t *pmodel, struct page_data *data, int button) {
         lv_obj_clear_flag(data->btn_par_temp, LV_OBJ_FLAG_HIDDEN);
     }
 
-    if (model_get_current_humidity_parameter(pmodel) == NULL) {
+    if (model_get_current_humidity_parameter(pmodel) == NULL || !model_should_display_humidity(pmodel)) {
         lv_obj_add_flag(data->btn_par_hum, LV_OBJ_FLAG_HIDDEN);
         if (button == PAR_HUMIDITY_BTN_ID) {
             button = PAR_TIME_BTN_ID;
@@ -339,6 +343,20 @@ static void update_alarm_popup(model_t *pmodel, struct page_data *data, int forc
 }
 
 
+static void update_communication_popup(model_t *pmodel, struct page_data *data) {
+    if (!model_is_machine_communication_ok(pmodel) && data->blanket == NULL) {
+        lv_obj_t *popup = view_common_create_choice_popup(
+            lv_scr_act(), 1, view_intl_get_string_in_language(data->language, STRINGS_ERRORE_DI_COMUNICAZIONE),
+            view_intl_get_string_in_language(data->language, STRINGS_RIPROVA), RETRY_COMM_BTN_ID,
+            view_intl_get_string_in_language(data->language, STRINGS_DISABILITA), DISABLE_COMM_BTN_ID);
+        data->blanket = lv_obj_get_parent(popup);
+    } else if (data->blanket != NULL) {
+        lv_obj_del(data->blanket);
+        data->blanket = NULL;
+    }
+}
+
+
 static void update_step_info(model_t *pmodel, struct page_data *data) {
     parameters_step_t *step = model_get_current_step(pmodel);
     if (step != NULL) {
@@ -385,7 +403,7 @@ static void update_state(model_t *pmodel, struct page_data *data) {
             lv_label_set_text(data->lbl_status, "");
             update_step_info(pmodel, data);
 
-            // lv_obj_clear_flag(data->btn_stop, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(data->btn_stop, LV_OBJ_FLAG_HIDDEN);
             // lv_obj_clear_flag(data->btn_pause, LV_OBJ_FLAG_HIDDEN);
             lv_obj_clear_flag(data->lbl_step_name, LV_OBJ_FLAG_HIDDEN);
             lv_obj_clear_flag(data->lbl_step_num, LV_OBJ_FLAG_HIDDEN);
@@ -399,7 +417,7 @@ static void update_state(model_t *pmodel, struct page_data *data) {
             lv_label_set_text(data->lbl_status, "");
             update_step_info(pmodel, data);
 
-            lv_obj_clear_flag(data->btn_stop, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(data->btn_stop, LV_OBJ_FLAG_HIDDEN);
             lv_obj_clear_flag(data->btn_pause, LV_OBJ_FLAG_HIDDEN);
             lv_obj_clear_flag(data->lbl_step_name, LV_OBJ_FLAG_HIDDEN);
             lv_obj_clear_flag(data->lbl_step_num, LV_OBJ_FLAG_HIDDEN);
@@ -473,10 +491,11 @@ static void open_page(pman_handle_t handle, void *state) {
 
     img = lv_img_create(lv_scr_act());
     lv_img_set_src(img, &img_temperature);
-    lv_obj_align(img, LV_ALIGN_BOTTOM_LEFT, 270, -60);
+    lv_obj_align(img, LV_ALIGN_BOTTOM_LEFT, 305, -32);
+    lv_obj_t *img_temp = img;
 
     lv_obj_t *lbl = lv_label_create(lv_scr_act());
-    lv_obj_align_to(lbl, img, LV_ALIGN_OUT_LEFT_MID, -10, -15);
+    lv_obj_align_to(lbl, img, LV_ALIGN_OUT_LEFT_MID, -20, -15);
     data->lbl_temp = lbl;
 
     img = lv_img_create(lv_scr_act());
@@ -505,6 +524,7 @@ static void open_page(pman_handle_t handle, void *state) {
         lv_obj_add_flag(data->temp_meter, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(data->lbl_temp, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(img, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(img_temp, LV_OBJ_FLAG_HIDDEN);
     }
 
     meter = lv_meter_create(lv_scr_act());
@@ -526,8 +546,8 @@ static void open_page(pman_handle_t handle, void *state) {
     }
 
     lv_obj_t *cont = lv_obj_create(lv_scr_act());
-    lv_obj_set_size(cont, 440, 320);
-    lv_obj_align(cont, LV_ALIGN_CENTER, -155, -4);
+    lv_obj_set_size(cont, 440, 280);
+    lv_obj_align(cont, LV_ALIGN_CENTER, -170, -4);
     lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_style(cont, (lv_style_t *)&style_transparent_container, LV_STATE_DEFAULT);
 
@@ -537,7 +557,7 @@ static void open_page(pman_handle_t handle, void *state) {
     lbl = lv_label_create(lbl_bg);
     lv_label_set_long_mode(lbl, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_font(lbl, &lv_font_montserrat_28, LV_STATE_DEFAULT);
-    lv_obj_align(lbl_bg, LV_ALIGN_CENTER, -80, 0);
+    lv_obj_align(lbl_bg, LV_ALIGN_CENTER, -35, 0);
     data->lbl_parametro = lbl;
 
     lv_obj_t *up = view_common_create_simple_image_button(cont, &img_up, &img_up_disabled, PAR_PLUS_BTN_ID);
@@ -551,7 +571,7 @@ static void open_page(pman_handle_t handle, void *state) {
     img = lv_img_create(hum);
     lv_img_set_src(img, &img_drops);
     lv_obj_align(img, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_align(hum, LV_ALIGN_TOP_RIGHT, -100, 0);
+    lv_obj_align(hum, LV_ALIGN_TOP_RIGHT, -85, 0);
     data->btn_par_hum = hum;
 
     lv_obj_t *time =
@@ -567,7 +587,7 @@ static void open_page(pman_handle_t handle, void *state) {
     img = lv_img_create(speed);
     lv_img_set_src(img, &img_speed);
     lv_obj_align(img, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_align(speed, LV_ALIGN_BOTTOM_RIGHT, -100, 0);
+    lv_obj_align(speed, LV_ALIGN_BOTTOM_RIGHT, -85, 0);
     data->btn_par_speed = speed;
 
     lv_obj_t *temp =
@@ -595,7 +615,7 @@ static void open_page(pman_handle_t handle, void *state) {
     data->img_lingua = img;
 
     lbl = lv_label_create(lv_scr_act());
-    lv_obj_align(lbl, LV_ALIGN_TOP_MID, -40, 140);
+    lv_obj_align(lbl, LV_ALIGN_TOP_MID, -20, 60);
     data->lbl_status = lbl;
 
     lbl = lv_label_create(lv_scr_act());
@@ -621,11 +641,11 @@ static void open_page(pman_handle_t handle, void *state) {
     data->btn_start = btn;
 
     btn = view_common_create_simple_image_button(lv_scr_act(), &img_stop, &img_stop, STOP_BTN_ID);
-    lv_obj_align(btn, LV_ALIGN_RIGHT_MID, -25, -5);
+    lv_obj_align(btn, LV_ALIGN_RIGHT_MID, -15, -5);
     data->btn_stop = btn;
 
     btn = view_common_create_simple_image_button(lv_scr_act(), &img_pause, &img_pause, PAUSE_BTN_ID);
-    lv_obj_align(btn, LV_ALIGN_RIGHT_MID, -142, -4);
+    lv_obj_align(btn, LV_ALIGN_RIGHT_MID, -108, 0);
     data->btn_pause = btn;
 
     btn = view_common_create_simple_image_button(lv_scr_act(), &img_up, &img_up_disabled, PROGRAM_UP_BTN_ID);
@@ -648,21 +668,24 @@ static void open_page(pman_handle_t handle, void *state) {
     update_program_data(pmodel, data);
     update_time(pmodel, data);
     update_sensors(pmodel, data);
+    update_communication_popup(pmodel, data);
 
+    /*
     lv_obj_t *kill_btn = lv_btn_create(lv_scr_act());
     lv_obj_set_size(kill_btn, 80,80);
     view_register_object_default_callback(kill_btn, KILL_BTN_ID);
+    */
 }
 
 
 static pman_msg_t process_page_event(pman_handle_t handle, void *state, pman_event_t event) {
-    pman_msg_t     msg     = PMAN_MSG_NULL;
+    pman_msg_t        msg     = PMAN_MSG_NULL;
     struct page_data *data    = state;
     model_updater_t   updater = pman_get_user_data(handle);
     model_t          *pmodel  = (model_t *)model_updater_get(updater);
 
     data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_NOTHING;
-    msg.user_msg = &data->cmsg;
+    msg.user_msg    = &data->cmsg;
 
     switch (event.tag) {
         case PMAN_EVENT_TAG_USER: {
@@ -685,17 +708,7 @@ static pman_msg_t process_page_event(pman_handle_t handle, void *state, pman_eve
                     break;
 
                 case VIEW_EVENT_CODE_ALARM:
-                    if (!model_is_machine_communication_ok(pmodel) && data->blanket == NULL) {
-                        lv_obj_t *popup = view_common_create_choice_popup(
-                            lv_scr_act(), 1,
-                            view_intl_get_string_in_language(data->language, STRINGS_ERRORE_DI_COMUNICAZIONE),
-                            view_intl_get_string_in_language(data->language, STRINGS_RIPROVA), RETRY_COMM_BTN_ID,
-                            view_intl_get_string_in_language(data->language, STRINGS_DISABILITA), DISABLE_COMM_BTN_ID);
-                        data->blanket = lv_obj_get_parent(popup);
-                    } else if (data->blanket != NULL) {
-                        lv_obj_del(data->blanket);
-                        data->blanket = NULL;
-                    }
+                    update_communication_popup(pmodel, data);
                     break;
 
                 default:

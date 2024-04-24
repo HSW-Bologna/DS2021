@@ -45,7 +45,7 @@ void parciclo_init(model_t *pmodel, size_t num_prog, size_t num_step) {
             // clang-format off
             pars[i++] = PARAMETER(&s->cooling.type,                  MODE_MANUAL,     MODE_AUTO,     MODE_MANUAL,    ((pudata_t){.t = PTYPE_DROPDOWN, .desc = DESC[PARAMETERS_DESC_TIPO_RAFFREDDAMENTO], .values = (const char***)parameters_modalita}),                     USER_BITS);
             pars[i++] = PARAMETER(&s->cooling.duration,              0,     MAX_STEP_DURATION,    60,    ((pudata_t){.t = PTYPE_TIME, .desc = DESC[PARAMETERS_DESC_DURATA], .fmt=msfmt, .min_sec = 1}),                     USER_BITS);
-            pars[i++] = PARAMETER(&s->cooling.enable_reverse,              0,     1,    0,    ((pudata_t){.t = PTYPE_SWITCH, .desc = DESC[PARAMETERS_DESC_DURATA], .values = (const char***)parameters_abilitazione}),                     USER_BITS);
+            pars[i++] = PARAMETER(&s->cooling.enable_reverse,              0,     1,    0,    ((pudata_t){.t = PTYPE_SWITCH, .desc = DESC[PARAMETERS_DESC_INVERSIONE], .values = (const char***)parameters_abilitazione}),                     USER_BITS);
             pars[i++] = PARAMETER(&s->cooling.rotation_time,         0,     60,       4,    ((pudata_t){.t = PTYPE_TIME, .desc = DESC[PARAMETERS_DESC_TEMPO_MARCIA], .fmt=secfmt}),               USER_BITS);
             pars[i++] = PARAMETER(&s->cooling.pause_time,            0,     60,       2,    ((pudata_t){.t = PTYPE_TIME, .desc = DESC[PARAMETERS_DESC_TEMPO_DI_PAUSA], .fmt=secfmt}),               USER_BITS);
             pars[i++] = PARAMETER(&s->cooling.temperature,            0,     MAX_TEMPERATURE,       40,    ((pudata_t){.t = PTYPE_NUMBER, .desc = DESC[PARAMETERS_DESC_TEMPERATURA], .fmt="%i C"}),               USER_BITS);

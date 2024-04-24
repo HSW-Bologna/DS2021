@@ -10,6 +10,7 @@
 #include "view/common.h"
 #include "utils/system_time.h"
 #include "config/app_conf.h"
+#include "log.h"
 
 
 #define PROG_BTNMX_UP      0
@@ -33,6 +34,7 @@ enum {
     PARAMETER_KB_ID,
     PARAMETER_SWITCH_ID,
     SAVE_ALL_IO_ID,
+    READ_LOG_IO_ID,
     PROGRAM_BTN_ID,
     PROGRAM_BTNMATRIX_ID,
     ADD_PROG_BTN_ID,
@@ -147,15 +149,17 @@ static void *create_page(pman_handle_t handle, void *extra) {
 static lv_obj_t *create_program_name_kb(lv_obj_t *root, model_t *pmodel) {
     lv_obj_t *blanket = view_common_create_blanket(root);
     lv_obj_t *kb      = lv_keyboard_create(blanket);
+    lv_obj_set_size(kb, LV_HOR_RES, 240);
     lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
 
     lv_obj_t *ta = lv_textarea_create(blanket);
-    lv_obj_set_size(ta, 480, 56);
-    lv_obj_align(ta, LV_ALIGN_TOP_MID, 0, 120);
+    lv_obj_set_size(ta, 520, 56);
+    lv_obj_align(ta, LV_ALIGN_TOP_MID, 0, 100);
+    lv_obj_set_style_text_font(ta, &lv_font_montserrat_28, LV_STATE_DEFAULT);
     lv_textarea_set_text(ta, "");
     lv_textarea_set_placeholder_text(ta, view_intl_get_string(pmodel, STRINGS_NOME_PROGRAMMA));
     lv_textarea_set_max_length(ta, 32);
-    lv_textarea_set_one_line(ta, 1);
+    // lv_textarea_set_one_line(ta, 1);
     lv_keyboard_set_textarea(kb, ta);
     view_register_object_default_callback(kb, KEYBOARD_ID);
 
@@ -234,26 +238,28 @@ static void update_param_list(struct page_data *data, model_t *pmodel) {
 
     for (size_t i = 0; i < maxp; i++) {
         lv_obj_t *btn = lv_list_add_btn(data->parmac.list, NULL, NULL);
+        lv_obj_set_style_pad_hor(btn, 2, LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(btn, lv_theme_get_color_secondary(btn), LV_STATE_CHECKED);
         lv_obj_add_flag(btn, LV_OBJ_FLAG_CHECKABLE);
         view_register_object_default_callback_with_number(btn, PARAMETER_BTN_ID, i);
 
         lv_obj_t *l1 = lv_label_create(btn);
         lv_label_set_text_fmt(l1, "%2zu ", i + 1);
-        lv_obj_set_width(l1, 32);
+        lv_label_set_long_mode(l1, LV_LABEL_LONG_CLIP);
+        lv_obj_set_width(l1, 30);
         lv_obj_t   *l2   = lv_label_create(btn);
         const char *text = parmac_get_description(pmodel, i);
         lv_label_set_text(l2, text);
         lv_label_set_long_mode(l2, LV_LABEL_LONG_SCROLL);
-        lv_obj_set_width(l2, 360);
+        lv_obj_set_width(l2, 350);
         lv_obj_set_style_anim_speed(l2, 12, LV_STATE_DEFAULT);
         lv_obj_align(l1, LV_ALIGN_LEFT_MID, 8, -20);
         lv_obj_align_to(l2, l1, LV_ALIGN_OUT_RIGHT_MID, 10, 0);
 
         char      string[128] = {0};
         lv_obj_t *l3          = lv_label_create(btn);
-        lv_label_set_long_mode(l3, LV_LABEL_LONG_DOT);
-        lv_obj_set_width(l3, 180);
+        lv_label_set_long_mode(l3, LV_LABEL_LONG_CLIP);
+        lv_obj_set_width(l3, 100);
         lv_label_set_text(l3, parmac_to_string(pmodel, string, sizeof(string), i));
         lv_obj_align(l3, LV_ALIGN_RIGHT_MID, 0, 0);
     }
@@ -317,7 +323,8 @@ static void create_tab_user(lv_obj_t *tab, model_t *pmodel, struct page_data *da
 
 static void create_tab_param(lv_obj_t *tab, model_t *pmodel, struct page_data *data) {
     lv_obj_t *list = lv_list_create(tab);
-    lv_obj_set_size(list, LV_PCT(65), LV_PCT(95));
+    lv_obj_set_size(list, LV_PCT(65), LV_PCT(90));
+    lv_obj_set_style_pad_hor(list, 0, LV_STATE_DEFAULT);
     lv_obj_align(list, LV_ALIGN_LEFT_MID, 10, 0);
     data->parmac.list = list;
 
@@ -376,8 +383,8 @@ static void create_tab_test(lv_obj_t *tab, model_t *pmodel, struct page_data *da
     lv_table_set_cell_value(table, 2, 2, pmodel->machine.date);
 
     lv_table_set_col_width(table, 0, 240);
-    lv_table_set_col_width(table, 1, 240);
-    lv_table_set_col_width(table, 2, 240);
+    lv_table_set_col_width(table, 1, 210);
+    lv_table_set_col_width(table, 2, 210);
 
     lv_obj_align(table, LV_ALIGN_CENTER, 0, -80);
 }
@@ -417,7 +424,7 @@ static void open_page(pman_handle_t handle, void *state) {
 
 
 static pman_msg_t process_page_event(pman_handle_t handle, void *state, pman_event_t event) {
-    pman_msg_t     msg     = PMAN_MSG_NULL;
+    pman_msg_t        msg     = PMAN_MSG_NULL;
     struct page_data *data    = state;
     model_updater_t   updater = pman_get_user_data(handle);
     model_t          *pmodel  = (model_t *)model_updater_get(updater);
@@ -453,7 +460,7 @@ static pman_msg_t process_page_event(pman_handle_t handle, void *state, pman_eve
                         } else if (--data->waiting_io == 0) {
                             msg.stack_msg.tag = PMAN_STACK_MSG_TAG_BACK;
                         }
-                    } else {
+                    } else if (user_event->io_op == READ_LOG_IO_ID) {
                         if (user_event->error) {
                             view_common_io_error_toast(pmodel);
                         }
@@ -462,6 +469,21 @@ static pman_msg_t process_page_event(pman_handle_t handle, void *state, pman_eve
                         msg.stack_msg.as.destination.page  = (void *)&page_log;
                     }
                     break;
+
+                case VIEW_EVENT_CODE_LVGL: {
+                    switch (user_event->data.id) {
+                        case PARAMETER_KB_ID:
+                            parameter_operator(&data->parmac.par, user_event->data.number);
+                            if (data->parmac.textarea != NULL) {
+                                char string[64] = {0};
+                                snprintf(string, sizeof(string), "%li", parameter_to_long(&data->parmac.par));
+                                lv_textarea_set_text(data->parmac.textarea, string);
+                            }
+                            break;
+                    }
+                    break;
+                }
+
                 default:
                     break;
             }
@@ -487,7 +509,7 @@ static pman_msg_t process_page_event(pman_handle_t handle, void *state, pman_eve
                         break;
 
                     case SETTINGS_BTN_ID:
-                        msg.stack_msg.tag = PMAN_STACK_MSG_TAG_CHANGE_PAGE;
+                        msg.stack_msg.tag                 = PMAN_STACK_MSG_TAG_CHANGE_PAGE;
                         msg.stack_msg.as.destination.page = (void *)&page_tech_settings;
                         break;
 
@@ -501,27 +523,22 @@ static pman_msg_t process_page_event(pman_handle_t handle, void *state, pman_eve
                         break;
 
                     case NETWORK_BTN_ID:
-                        msg.stack_msg.tag = PMAN_STACK_MSG_TAG_CHANGE_PAGE;
+                        msg.stack_msg.tag                 = PMAN_STACK_MSG_TAG_CHANGE_PAGE;
                         msg.stack_msg.as.destination.page = (void *)&page_network;
                         break;
 
                     case LOG_BTN_ID:
-                        data->cmsg.code = VIEW_CONTROLLER_MESSAGE_CODE_READ_LOG_FILE;
-                        data->blanket   = view_common_create_blanket(lv_scr_act());
+                        data->cmsg.code       = VIEW_CONTROLLER_MESSAGE_CODE_READ_LOG_FILE;
+                        data->cmsg.disk_op_id = READ_LOG_IO_ID;
+                        data->blanket         = view_common_create_blanket(lv_scr_act());
                         break;
 
                     case DRIVE_BTN_ID:
-                        msg.stack_msg.tag = PMAN_STACK_MSG_TAG_CHANGE_PAGE;
+                        msg.stack_msg.tag                 = PMAN_STACK_MSG_TAG_CHANGE_PAGE;
                         msg.stack_msg.as.destination.page = (void *)&page_drive;
                         break;
 
                     case PARAMETER_KB_ID:
-                        parameter_operator(&data->parmac.par, objdata->number);
-                        if (data->parmac.textarea != NULL) {
-                            char string[64] = {0};
-                            snprintf(string, sizeof(string), "%li", parameter_to_long(&data->parmac.par));
-                            lv_textarea_set_text(data->parmac.textarea, string);
-                        }
                         break;
 
                     case PROGRAM_BTN_ID:
@@ -581,24 +598,26 @@ static pman_msg_t process_page_event(pman_handle_t handle, void *state, pman_eve
                         break;
 
                     case PARAMETER_CONFIRM_BTN_ID:
-                        if (data->parmac.editor != NULL) {
-                            lv_obj_del(data->parmac.editor);
-                            data->parmac.editor = NULL;
-                        }
                         model_parameter_set_value(parmac_get_handle(pmodel, objdata->number),
                                                   parameter_to_long(&data->parmac.par));
                         update_param_list(data, pmodel);
                         model_mark_parmac_to_save(pmodel);
+
+                        if (data->parmac.editor != NULL) {
+                            lv_obj_del(data->parmac.editor);
+                            data->parmac.editor = NULL;
+                        }
                         break;
 
                     case PARAMETER_BTN_ID: {
-                        if (data->parmac.editor != NULL) {
-                            lv_obj_del(data->parmac.editor);
-                        }
                         view_common_select_btn_in_list(data->parmac.list, objdata->number);
                         parameter_clone(&data->parmac.par, parmac_get_handle(pmodel, objdata->number),
                                         (void *)&data->parmac.par_buffer);
                         data->parmac.num = objdata->number;
+
+                        if (data->parmac.editor != NULL) {
+                            lv_obj_del(data->parmac.editor);
+                        }
 
                         data->parmac.editor = view_common_build_param_editor(
                             data->parmac.tab, &data->parmac.textarea, pmodel, &data->parmac.par, data->parmac.num,
@@ -632,7 +651,7 @@ static pman_msg_t process_page_event(pman_handle_t handle, void *state, pman_eve
                                 break;
 
                             case PROG_BTNMX_CONFIRM:
-                                msg.stack_msg.tag  = PMAN_STACK_MSG_TAG_CHANGE_PAGE_EXTRA;
+                                msg.stack_msg.tag                  = PMAN_STACK_MSG_TAG_CHANGE_PAGE_EXTRA;
                                 msg.stack_msg.as.destination.extra = (void *)(uintptr_t)data->prog.selected_prog;
                                 msg.stack_msg.as.destination.page  = (void *)&page_program;
                                 break;

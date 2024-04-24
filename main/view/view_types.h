@@ -74,6 +74,7 @@ typedef enum {
     VIEW_CONTROLLER_MESSAGE_CODE_CHANGE_HUMIDITY,
     VIEW_CONTROLLER_MESSAGE_CODE_CHANGE_SPEED,
     VIEW_CONTROLLER_MESSAGE_CODE_READ_STATISTICS,
+    VIEW_CONTROLLER_MESSAGE_CODE_FIRMWARE_UPDATE,
 } view_controller_message_code_t;
 
 
@@ -104,6 +105,7 @@ typedef struct {
             char ssid[33];
             char psk[33];
         };
+        int disk_op_id;
     };
 } view_controller_message_t;
 

@@ -27,6 +27,7 @@ lv_obj_t *view_common_create_blanket(lv_obj_t *parent) {
     lv_obj_set_style_radius(root, 0, LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(root, LV_OPA_40, LV_STATE_DEFAULT);
     lv_obj_set_style_bg_color(root, lv_color_black(), LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_all(root, 0, LV_STATE_DEFAULT);
     lv_obj_set_size(root, LV_PCT(100), LV_PCT(100));
     return root;
 }
@@ -143,6 +144,7 @@ lv_obj_t *view_common_build_param_editor(lv_obj_t *root, lv_obj_t **textarea, mo
 
     lv_obj_set_size(cont, LV_PCT(32), LV_PCT(95));
     lv_obj_align(cont, LV_ALIGN_RIGHT_MID, -10, 0);
+    lv_obj_set_style_pad_all(cont, 4, LV_STATE_DEFAULT);
     lv_obj_set_scrollbar_mode(cont, LV_SCROLLBAR_MODE_OFF);
 
     lv_obj_t *lbl_description = lv_label_create(cont);
@@ -168,7 +170,7 @@ lv_obj_t *view_common_build_param_editor(lv_obj_t *root, lv_obj_t **textarea, mo
     lv_obj_align(btn, LV_ALIGN_BOTTOM_LEFT, 8, -8);
 
     btn = lv_btn_create(cont);
-    view_register_object_default_callback_with_number( btn, default_id, num);
+    view_register_object_default_callback_with_number(btn, default_id, num);
     l = lv_label_create(btn);
     lv_label_set_text(l, view_intl_get_string(pmodel, STRINGS_DEFAULT));
     lv_obj_set_size(btn, 120, 40);
@@ -190,7 +192,7 @@ lv_obj_t *view_common_build_param_editor(lv_obj_t *root, lv_obj_t **textarea, mo
             }
 
             lv_obj_t *list = lv_dropdown_create(cont);
-            view_register_object_default_callback_with_number( list, dd_id, num);
+            view_register_object_default_callback_with_number(list, dd_id, num);
             lv_dropdown_set_options(list, options);
             lv_obj_set_width(list, 240);
             lv_dropdown_set_symbol(list, NULL);
@@ -213,13 +215,13 @@ lv_obj_t *view_common_build_param_editor(lv_obj_t *root, lv_obj_t **textarea, mo
             } else {
                 lv_obj_clear_state(sw, LV_STATE_CHECKED);
             }
-            view_register_object_default_callback( sw, sw_id);
+            view_register_object_default_callback(sw, sw_id);
             lv_obj_set_size(sw, 120, 40);
 
             lv_label_set_long_mode(lbl_description, LV_LABEL_LONG_WRAP);
             lv_obj_set_width(lbl_description, LV_PCT(95));
 
-            lv_obj_align_to(sw, lbl_description, LV_ALIGN_OUT_BOTTOM_MID, 0, 32);
+            lv_obj_align(sw, LV_ALIGN_BOTTOM_MID, 0, -160);
             break;
         }
 
@@ -229,7 +231,7 @@ lv_obj_t *view_common_build_param_editor(lv_obj_t *root, lv_obj_t **textarea, mo
             lv_textarea_set_one_line(ta, 1);
             snprintf(string, 64, "%li", parameter_to_long(par));
             lv_textarea_set_text(ta, string);
-            lv_obj_set_size(ta, 180, 56);
+            lv_obj_set_size(ta, 180, 40);
             lv_obj_clear_flag(ta, LV_OBJ_FLAG_SCROLLABLE);
             lv_obj_align(ta, LV_ALIGN_TOP_MID, 0, 40);
             lv_obj_add_state(ta, LV_STATE_FOCUSED);
@@ -243,7 +245,7 @@ lv_obj_t *view_common_build_param_editor(lv_obj_t *root, lv_obj_t **textarea, mo
             lv_obj_align_to(msg, ta, LV_ALIGN_OUT_BOTTOM_MID, 0, 3);
             lv_obj_add_flag(msg, LV_OBJ_FLAG_HIDDEN);
 
-            view_register_object_default_callback( ta, ta_id);
+            view_register_object_default_callback(ta, ta_id);
 
             // clang-format off
             static const char *kbmap[] = {"1", "2", "3", LV_SYMBOL_BACKSPACE, "\n",
@@ -262,7 +264,8 @@ lv_obj_t *view_common_build_param_editor(lv_obj_t *root, lv_obj_t **textarea, mo
             lv_obj_t *kb = lv_keyboard_create(cont);
             lv_keyboard_set_textarea(kb, ta);
             lv_keyboard_set_mode(kb, LV_KEYBOARD_MODE_NUMBER);
-            lv_obj_align_to(kb, ta, LV_ALIGN_OUT_BOTTOM_MID, 0, 30);
+            lv_obj_set_size(kb, 240, 210);
+            lv_obj_align_to(kb, ta, LV_ALIGN_OUT_BOTTOM_MID, 0, 5);
             lv_keyboard_set_map(kb, LV_KEYBOARD_MODE_NUMBER, kbmap, ctrl_map);
             view_register_keyboard_plus_minus_callback(kb, kb_id);
             break;
@@ -315,11 +318,11 @@ lv_obj_t *view_common_build_param_editor(lv_obj_t *root, lv_obj_t **textarea, mo
             lv_label_set_long_mode(lbl_description, LV_LABEL_LONG_WRAP);
             lv_obj_set_width(lbl_description, LV_PCT(95));
 
-            lv_obj_align_to(roller1, lbl_description, LV_ALIGN_OUT_BOTTOM_MID, -45, 32);
-            lv_obj_align_to(roller2, lbl_description, LV_ALIGN_OUT_BOTTOM_MID, 45, 32);
+            lv_obj_align(roller1, LV_ALIGN_BOTTOM_MID, -45, -110);
+            lv_obj_align(roller2, LV_ALIGN_BOTTOM_MID, 45, -110);
 
-            view_register_object_default_callback( roller1, roller1_id);
-            view_register_object_default_callback( roller2, roller2_id);
+            view_register_object_default_callback(roller1, roller1_id);
+            view_register_object_default_callback(roller2, roller2_id);
 
             unsigned int min = parameter_to_long(par) / 60;
             unsigned int sec = parameter_to_long(par) % 60;
@@ -377,7 +380,7 @@ lv_obj_t *view_common_icon_button(lv_obj_t *parent, char *symbol, int id) {
     lv_label_set_text(lbl, symbol);
     lv_obj_set_size(btn, 64, 64);
     lv_obj_align(lbl, LV_ALIGN_CENTER, 0, 0);
-    view_register_object_default_callback( btn, id);
+    view_register_object_default_callback(btn, id);
 
     return btn;
 }
@@ -471,8 +474,8 @@ lv_obj_t *view_common_create_simple_image_button(lv_obj_t *parent, const lv_img_
 }
 
 
-lv_obj_t *view_common_create_image_button(lv_obj_t *parent, const lv_img_dsc_t *src,
-                                          const lv_img_dsc_t *src_pressed, const lv_img_dsc_t *src_checked, int id) {
+lv_obj_t *view_common_create_image_button(lv_obj_t *parent, const lv_img_dsc_t *src, const lv_img_dsc_t *src_pressed,
+                                          const lv_img_dsc_t *src_checked, int id) {
     lv_obj_t *btn = lv_imgbtn_create(parent);
     lv_imgbtn_set_src(btn, LV_IMGBTN_STATE_RELEASED, NULL, src, NULL);
     lv_imgbtn_set_src(btn, LV_IMGBTN_STATE_PRESSED, NULL, src_pressed, NULL);

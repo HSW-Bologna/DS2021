@@ -31,6 +31,8 @@ int main(int argc, char *argv[]) {
     log_set_level(CONFIG_LOG_LEVEL);
     log_file_init();
 
+    log_info("App version %s, %s", SOFTWARE_VERSION, SOFTWARE_BUILD_DATE);
+
     model_init(&model);
 
     lv_init();

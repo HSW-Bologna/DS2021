@@ -33,7 +33,7 @@ static void open_page(pman_handle_t handle, void *state) {
     view_common_create_title(lv_scr_act(), view_intl_get_string(pmodel, STRINGS_VERBALE), BACK_BTN_ID);
 
     lv_obj_t *page = lv_obj_create(lv_scr_act());
-    lv_obj_set_size(page, LV_PCT(100), LV_PCT(90));
+    lv_obj_set_size(page, LV_PCT(100), LV_PCT(85));
     lv_obj_align(page, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_obj_t *label = lv_label_create(page);
     lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);

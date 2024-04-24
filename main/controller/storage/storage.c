@@ -38,7 +38,6 @@ static inline void remount_rw() {
 #define BASENAME(x) (strrchr(x, '/') + 1)
 
 
-static int   is_file(const char *path);
 static int   is_dir(const char *path);
 static int   dir_exists(char *name);
 static int   is_drive(const char *path);
@@ -47,7 +46,7 @@ static int   count_occurrences(const char *str, char c);
 static void  add_entry_from_data(struct archive *a, struct archive_entry *entry, uint8_t *data, size_t len, char *name);
 static void  add_entry_from_path(struct archive *a, struct archive_entry *entry, char *path, char *name);
 static int   copy_archive(struct archive *ar, struct archive *aw);
-static void  create_dir(char *name);
+static int   copy_file(const char *to, const char *from);
 
 
 int storage_load_parmac(char *path, parmac_t *parmac) {
@@ -125,10 +124,14 @@ int storage_update_program(const char *path, dryer_program_t *p) {
 
     snprintf(filename, sizeof(filename), "%s/%s", path, p->filename);
     FILE *fp = fopen(filename, "w");
+    if (fp == NULL) {
+        log_error("Unable to open %s: %s", filename, strerror(errno));
+    }
     if (fwrite(buffer, 1, size, fp) == 0) {
         res = 1;
         log_error("Non sono riuscito a scrivere il file %s : %s", filename, strerror(errno));
     }
+    log_info("Salvato programma %s con %i step", p->nomi[0], p->num_steps);
 
     fclose(fp);
     remount_ro();
@@ -251,8 +254,8 @@ int storage_load_saved_programs(const char *path, storage_program_list_t *list) 
         strcpy(filename, names[i]);
         free(names[i]);
 
-        if (is_file(file_path)) {
-            log_debug("Trovato lavaggio %s", file_path);
+        if (storage_is_file(file_path)) {
+            log_info("Trovato lavaggio %s", file_path);
             FILE *fp = fopen(file_path, "r");
 
             if (!fp) {
@@ -267,6 +270,7 @@ int storage_load_saved_programs(const char *path, storage_program_list_t *list) 
             } else {
                 program_deserialize(&list->programs[count], buffer);
                 memcpy(&list->programs[count].filename, filename, STRING_NAME_SIZE);
+                log_info("Prog %zu with %i steps", count, list->programs[count].num_steps);
 
                 count++;
             }
@@ -350,7 +354,7 @@ int storage_list_saved_machines(char *location, name_t **names) {
     if (d != NULL) {
         while ((dir = readdir(d)) != NULL) {
             snprintf(path, sizeof(path), "%s/%s", location, dir->d_name);
-            if (is_file(path)) {
+            if (storage_is_file(path)) {
                 num++;
             }
         }
@@ -362,7 +366,7 @@ int storage_list_saved_machines(char *location, name_t **names) {
         while ((dir = readdir(d)) != NULL && count < num) {
             snprintf(path, sizeof(path), "%s/%s", location, dir->d_name);
 
-            if (!is_file(path)) {
+            if (!storage_is_file(path)) {
                 continue;
             }
 
@@ -586,8 +590,9 @@ int storage_mount_drive(void) {
     char path[80];
     char drive[64];
 
-    if (!dir_exists(DRIVE_MOUNT_PATH))
-        create_dir(DRIVE_MOUNT_PATH);
+    if (!dir_exists(DRIVE_MOUNT_PATH)) {
+        storage_create_dir(DRIVE_MOUNT_PATH);
+    }
 
     char c = storage_is_drive_plugged();
     if (!c) {
@@ -628,6 +633,41 @@ void storage_unmount_drive(void) {
 }
 
 
+int storage_is_file(const char *path) {
+    struct stat path_stat;
+    if (stat(path, &path_stat) < 0)
+        return 0;
+    return S_ISREG(path_stat.st_mode);
+}
+
+
+int storage_update_temporary_firmware(char *app_path, char *temporary_path) {
+    int res = 0;
+
+#ifdef TARGET_DEBUG
+    return 0;
+#endif
+
+    if (storage_is_file(app_path)) {
+        if (mount("/dev/root", "/", "ext2", MS_REMOUNT, NULL) < 0) {
+            log_error("Errore nel montare la root: %s (%i)", strerror(errno), errno);
+            return -1;
+        }
+
+        if ((res = copy_file(temporary_path, app_path)) < 0)
+            log_error("Non sono riuscito ad aggiornare il firmware");
+
+        if (mount("/dev/root", "/", "ext2", MS_REMOUNT | MS_RDONLY, NULL) < 0)
+            log_warn("Errore nel rimontare la root: %s (%i)", strerror(errno), errno);
+
+        sync();
+    } else {
+        return -1;
+    }
+
+    return res;
+}
+
 
 /*
  *  Static functions
@@ -639,14 +679,6 @@ static int is_dir(const char *path) {
     if (stat(path, &path_stat) < 0)
         return 0;
     return S_ISDIR(path_stat.st_mode);
-}
-
-
-static int is_file(const char *path) {
-    struct stat path_stat;
-    if (stat(path, &path_stat) < 0)
-        return 0;
-    return S_ISREG(path_stat.st_mode);
 }
 
 
@@ -767,8 +799,51 @@ static int copy_archive(struct archive *ar, struct archive *aw) {
 }
 
 
-static void create_dir(char *name) {
+void storage_create_dir(char *name) {
     remount_rw();
     DIR_CHECK(mkdir(name, 0766));
     remount_ro();
+}
+
+
+static int copy_file(const char *to, const char *from) {
+    int     fd_to, fd_from;
+    char    buf[4096];
+    ssize_t nread;
+
+    fd_from = open(from, O_RDONLY);
+    if (fd_from < 0) {
+        log_warn("Non sono riuscito ad aprire %s: %s", from, strerror(errno));
+        return -1;
+    }
+
+    fd_to = open(to, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    if (fd_to < 0) {
+        log_warn("Non sono riuscito ad aprire %s: %s", to, strerror(errno));
+        close(fd_from);
+        return -1;
+    }
+
+    while ((nread = read(fd_from, buf, sizeof buf)) > 0) {
+        char   *out_ptr = buf;
+        ssize_t nwritten;
+
+        do {
+            nwritten = write(fd_to, out_ptr, nread);
+
+            if (nwritten >= 0) {
+                nread -= nwritten;
+                out_ptr += nwritten;
+            } else {
+                close(fd_from);
+                close(fd_to);
+                return -1;
+            }
+        } while (nread > 0);
+    }
+
+    close(fd_to);
+    close(fd_from);
+
+    return 0;
 }

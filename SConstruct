@@ -127,7 +127,7 @@ def main():
     simulated_env.Tool('compilation_db')
 
     target_env = simulated_env.Clone(
-        LIBS=["-lpthread", "-larchive"], CC="~/Mount/Data/Projects/buildrpi/output/host/bin/aarch64-buildroot-linux-uclibc-gcc",
+        LIBS=["-lpthread", "-larchive"], CC="~/Mount/Data/Projects/new_buildroot/buildrpi3/output/host/bin/aarch64-buildroot-linux-uclibc-gcc",
         CCFLAGS=CFLAGS + ["-DUSE_FBDEV=1", "-DUSE_EVDEV=1"])
 
     simulated_prog = get_target(
@@ -145,7 +145,7 @@ def main():
         'kill-remote',
         f"ssh {compatibility_options} root@{ip_addr} 'killall gdbserver; killall app; killall sh'; true", None)
     PhonyTargets(
-        "scp", f"scp {compatibility_options} DS2021 root@{ip_addr}:/tmp/app", [target_prog, "kill-remote"])
+        "scp", f"scp -O {compatibility_options} DS2021 root@{ip_addr}:/tmp/app", [target_prog, "kill-remote"])
     PhonyTargets(
         'ssh', f"ssh {compatibility_options} root@{ip_addr}", [])
     PhonyTargets(

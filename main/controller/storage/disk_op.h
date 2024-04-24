@@ -34,6 +34,8 @@ int    disk_op_is_drive_mounted(void);
 size_t disk_op_drive_machines(name_t **machines);
 void   disk_op_export_current_machine(char *name, disk_op_callback_t cb, disk_op_error_callback_t errcb, void *arg);
 void   disk_op_import_current_machine(char *name, disk_op_callback_t cb, disk_op_error_callback_t errcb, void *arg);
+int    disk_op_is_firmware_present(void);
+void   disk_op_firmware_update(disk_op_callback_t cb, disk_op_error_callback_t errcb, void *arg);
 
 
 #endif

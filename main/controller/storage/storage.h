@@ -28,6 +28,8 @@ int    storage_list_saved_machines(char *location, name_t **names);
 int    storage_save_current_machine_config(const char *destination, const char *name);
 int    storage_load_current_machine_config(const char *location, const char *name);
 int    storage_read_archive_data_version(const char *location, const char *name);
-
+int    storage_is_file(const char *path);
+void   storage_create_dir(char *name);
+int    storage_update_temporary_firmware(char *app_path, char *temporary_path);
 
 #endif

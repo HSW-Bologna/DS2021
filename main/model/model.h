@@ -217,7 +217,8 @@ typedef struct {
 
         size_t  num_drive_machines;
         name_t *drive_machines;
-        int     drive_mounted;
+        uint8_t drive_mounted;
+        uint8_t firmware_update_ready;
     } system;
 
     struct {
@@ -319,5 +320,7 @@ uint16_t   *model_get_maximum_speed(model_t *pmodel);
 uint16_t   *model_get_minimum_speed(model_t *pmodel);
 void        model_update_statistics(model_t *pmodel, statistics_t stats);
 int         model_is_machine_communication_enabled(model_t *pmodel);
+uint8_t     model_should_display_humidity(model_t *pmodel);
+uint8_t     model_get_speed_in_percentage(model_t *pmodel, uint16_t speed);
 
 #endif

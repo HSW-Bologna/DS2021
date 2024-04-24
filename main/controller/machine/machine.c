@@ -240,7 +240,7 @@ void machine_test_rele(size_t rele, int value) {
 }
 
 
-void machine_send_step(parameters_step_t *step, size_t prog_num, size_t step_num, int start) {
+void machine_send_step(model_t *pmodel, parameters_step_t *step, size_t prog_num, size_t step_num, int start) {
     if (step == NULL) {
         return;
     }
@@ -252,6 +252,16 @@ void machine_send_step(parameters_step_t *step, size_t prog_num, size_t step_num
         .step_num = step_num,
         .start    = start,
     };
+
+    switch (message.step.type) {
+        case DRYER_PROGRAM_STEP_TYPE_DRYING:
+            message.step.drying.speed = model_get_speed_in_percentage(pmodel, message.step.drying.speed);
+            break;
+        case DRYER_PROGRAM_STEP_TYPE_UNFOLDING:
+            message.step.unfolding.speed = model_get_speed_in_percentage(pmodel, message.step.unfolding.speed);
+            break;
+    }
+
     send_message(&message);
 }
 

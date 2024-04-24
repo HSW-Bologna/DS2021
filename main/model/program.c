@@ -148,6 +148,41 @@ void program_copy_step(dryer_program_t *p, size_t src, size_t pos) {
 
 static parameters_step_t default_step(int tipo) {
     parameters_step_t step = {.type = tipo};
+
+    switch (step.type) {
+        case DRYER_PROGRAM_STEP_TYPE_DRYING:
+            step.drying.type                           = MODE_MANUAL;
+            step.drying.duration                       = 60;
+            step.drying.enable_waiting_for_temperature = 0;
+            step.drying.enable_reverse                 = 0;
+            step.drying.rotation_time                  = 4;
+            step.drying.pause_time                     = 2;
+            step.drying.speed                          = 40;
+            step.drying.temperature                    = 40;
+            step.drying.humidity                       = 40;
+            break;
+
+        case DRYER_PROGRAM_STEP_TYPE_COOLING:
+            step.cooling.type               = MODE_MANUAL;
+            step.cooling.duration           = 60;
+            step.cooling.enable_reverse     = 0;
+            step.cooling.rotation_time      = 4;
+            step.cooling.pause_time         = 2;
+            step.cooling.temperature        = 40;
+            step.cooling.deodorant_delay    = 0;
+            step.cooling.deodorant_duration = 0;
+            break;
+
+        case DRYER_PROGRAM_STEP_TYPE_UNFOLDING:
+            step.unfolding.max_duration  = 120;
+            step.unfolding.max_cycles    = 120;
+            step.unfolding.speed         = 40;
+            step.unfolding.rotation_time = 2;
+            step.unfolding.pause_time    = 2;
+            step.unfolding.start_delay   = 2;
+            break;
+    }
+
     return step;
 }
 

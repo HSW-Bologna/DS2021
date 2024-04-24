@@ -66,3 +66,5 @@ TEMPO_IN_RISCALDAMENTO, Tempo in riscaldamento, Heating time
 COMUNICAZIONE_MACCHINA, Comunicazione macchina, Machine communication
 CICLI_COMPLETI, Cicli completi, Complete cycles
 CICLI_PARZIALI, Cicli parziali, Partial cycles
+AGGIORNA_FIRMWARE, Aggiorna firmware, Firmware update
+AGGIORNARE_FIRMWARE, Aggiornare il firmware della scheda con la versione presente sulla chiavetta USB?, Update the board's firmware with the copy on the thumb USB drive?

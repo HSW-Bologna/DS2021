@@ -60,15 +60,15 @@ static void open_page(pman_handle_t handle, void *state) {
     view_common_create_title(lv_scr_act(), view_intl_get_string(pmodel, STRINGS_STATISTICHE), BACK_BTN_ID);
 
     lv_obj_t *page = lv_obj_create(lv_scr_act());
-    lv_obj_set_size(page, LV_PCT(100), LV_PCT(88));
+    lv_obj_set_size(page, LV_PCT(95), LV_PCT(85));
     lv_obj_align(page, LV_ALIGN_BOTTOM_MID, 0, 0);
 
     lv_obj_t *table = lv_table_create(page);
-    lv_obj_align(table, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_align(table, LV_ALIGN_TOP_MID, 0, 0);
 
     lv_table_set_col_cnt(table, 2);
-    lv_table_set_col_width(table, 0, 480);
-    lv_table_set_col_width(table, 1, 480);
+    lv_table_set_col_width(table, 0, 440);
+    lv_table_set_col_width(table, 1, 240);
     lv_obj_set_style_bg_color(table, lv_palette_main(LV_PALETTE_YELLOW), LV_STATE_DEFAULT | LV_PART_ITEMS);
 
     lv_table_set_cell_value(table, 0, 0, view_intl_get_string(pmodel, STRINGS_CICLI_COMPLETI));

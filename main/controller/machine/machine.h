@@ -79,7 +79,7 @@ void machine_refresh_state(void);
 void machine_send_command(uint16_t command);
 void machine_test_pwm(size_t pwm, int speed);
 void machine_send_parmac(parmac_t *parmac);
-void machine_send_step(parameters_step_t *step, size_t prog_num, size_t step_num, int start);
+void machine_send_step(model_t *pmodel, parameters_step_t *step, size_t prog_num, size_t step_num, int start);
 void machine_refresh_sensors(void);
 void machine_get_extended_state(void);
 void machine_change_speed(uint16_t speed);

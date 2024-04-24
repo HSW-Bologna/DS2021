@@ -99,8 +99,8 @@ static void open_page(pman_handle_t handle, void *arg) {
     view_common_create_title(lv_scr_act(), string, BACK_BTN_ID);
 
     lv_obj_t *list = lv_list_create(lv_scr_act());
-    lv_obj_set_size(list, LV_PCT(65), LV_PCT(80));
-    lv_obj_align(list, LV_ALIGN_LEFT_MID, 10, 0);
+    lv_obj_set_size(list, LV_PCT(65), 400);
+    lv_obj_align(list, LV_ALIGN_BOTTOM_LEFT, 10, -5);
     data->list = list;
 
     data->editor = NULL;
@@ -120,6 +120,29 @@ static pman_msg_t process_page_event(pman_handle_t handle, void *arg, pman_event
     msg.user_msg    = &data->cmsg;
 
     switch (event.tag) {
+        case PMAN_EVENT_TAG_USER: {
+            view_event_t *user_event = event.as.user;
+            switch (user_event->code) {
+                case VIEW_EVENT_CODE_LVGL: {
+                    switch (user_event->data.id) {
+                        case PARAMETER_KB_ID:
+                            parameter_operator(&data->par, user_event->data.number);
+                            if (data->textarea != NULL) {
+                                char string[64] = {0};
+                                snprintf(string, sizeof(string), "%li", parameter_to_long(&data->par));
+                                lv_textarea_set_text(data->textarea, string);
+                            }
+                            break;
+                    }
+                    break;
+                }
+
+                default:
+                    break;
+            }
+            break;
+        }
+
         case PMAN_EVENT_TAG_LVGL: {
             lv_obj_t           *target  = lv_event_get_current_target(event.as.lvgl);
             view_object_data_t *objdata = lv_obj_get_user_data(target);
@@ -127,12 +150,6 @@ static pman_msg_t process_page_event(pman_handle_t handle, void *arg, pman_event
             if (lv_event_get_code(event.as.lvgl) == LV_EVENT_CLICKED) {
                 switch (objdata->id) {
                     case PARAMETER_KB_ID:
-                        parameter_operator(&data->par, objdata->number);
-                        if (data->textarea != NULL) {
-                            char string[64] = {0};
-                            snprintf(string, sizeof(string), "%li", parameter_to_long(&data->par));
-                            lv_textarea_set_text(data->textarea, string);
-                        }
                         break;
 
                     case BACK_BTN_ID:
@@ -140,32 +157,39 @@ static pman_msg_t process_page_event(pman_handle_t handle, void *arg, pman_event
                         break;
 
                     case PARAMETER_BTN_ID: {
-                        if (data->editor != NULL) {
-                            lv_obj_del(data->editor);
-                        }
                         view_common_select_btn_in_list(data->list, objdata->number);
                         parameter_clone(&data->par, parciclo_get_handle(pmodel, objdata->number),
                                         (void *)&data->par_buffer);
                         data->num = objdata->number;
 
+                        if (data->editor != NULL) {
+                            lv_obj_del(data->editor);
+                        }
+
                         data->editor = view_common_build_param_editor(
                             lv_scr_act(), &data->textarea, pmodel, &data->par, data->num, PARAMETER_DROPDOWN_ID,
                             PARAMETER_SWITCH_ID, PARAMETER_TA_ID, PARAMETER_KB_ID, PARAMETER_ROLLER1_ID,
                             PARAMETER_ROLLER2_ID, PARAMETER_CANCEL_BTN_ID, PARAMETER_CONFIRM_BTN_ID,
                             PARAMETER_DEFAULT_BTN_ID);
+                        lv_obj_set_height(data->editor, 400);
+                        lv_obj_align(data->editor, LV_ALIGN_BOTTOM_RIGHT, -10, -5);
                         break;
                     }
 
                     case PARAMETER_DEFAULT_BTN_ID: {
                         parameter_reset_to_defaults(&data->par, 1);
+
                         if (data->editor != NULL) {
                             lv_obj_del(data->editor);
                         }
+
                         data->editor = view_common_build_param_editor(
                             lv_scr_act(), &data->textarea, pmodel, &data->par, data->num, PARAMETER_DROPDOWN_ID,
                             PARAMETER_SWITCH_ID, PARAMETER_TA_ID, PARAMETER_KB_ID, PARAMETER_ROLLER1_ID,
                             PARAMETER_ROLLER2_ID, PARAMETER_CANCEL_BTN_ID, PARAMETER_CONFIRM_BTN_ID,
                             PARAMETER_DEFAULT_BTN_ID);
+                        lv_obj_set_height(data->editor, 400);
+                        lv_obj_align(data->editor, LV_ALIGN_BOTTOM_RIGHT, -10, -5);
                         break;
                     }
 
@@ -177,12 +201,14 @@ static pman_msg_t process_page_event(pman_handle_t handle, void *arg, pman_event
                         break;
 
                     case PARAMETER_CONFIRM_BTN_ID:
+                        model_parameter_set_value(parciclo_get_handle(pmodel, objdata->number),
+                                                  parameter_to_long(&data->par));
+
                         if (data->editor != NULL) {
                             lv_obj_del(data->editor);
                             data->editor = NULL;
                         }
-                        model_parameter_set_value(parciclo_get_handle(pmodel, objdata->number),
-                                                  parameter_to_long(&data->par));
+
                         update_param_list(data, pmodel);
                         model_mark_program_to_save(pmodel, data->num_prog);
                         break;

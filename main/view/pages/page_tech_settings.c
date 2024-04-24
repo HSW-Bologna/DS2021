@@ -71,21 +71,14 @@ static void open_page(pman_handle_t handle, void *state) {
     lv_label_set_text(lbl, view_intl_get_string(pmodel, STRINGS_MODELLO_MACCHINA_IN_USO));
     lv_obj_align(lbl, LV_ALIGN_TOP_LEFT, LV_HOR_RES / 2 + 4, 100);
 
-    lv_obj_t *kb = lv_keyboard_create(lv_scr_act());
-    lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
-
     lv_obj_t *ta = lv_textarea_create(lv_scr_act());
     lv_obj_align_to(ta, lbl, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 8);
     lv_textarea_set_placeholder_text(ta, view_intl_get_string(pmodel, STRINGS_MODELLO_MACCHINA));
     lv_textarea_set_text(ta, pmodel->configuration.parmac.nome);
     lv_textarea_set_max_length(ta, 32);
     lv_textarea_set_one_line(ta, 1);
-    lv_keyboard_set_textarea(kb, ta);
     lv_obj_set_size(ta, LV_PCT(48), 56);
-    view_register_object_default_callback(kb, KEYBOARD_ID);
     view_register_object_default_callback(ta, NAME_TA_ID);
-    lv_obj_add_flag(kb, LV_OBJ_FLAG_HIDDEN);
-    data->kb = kb;
 
     lv_obj_t *btn = lv_btn_create(lv_scr_act());
     lv_obj_set_size(btn, 280, 100);
@@ -104,12 +97,19 @@ static void open_page(pman_handle_t handle, void *state) {
     data->com_btn = btn;
     data->com_led = led;
 
+    lv_obj_t *kb = lv_keyboard_create(lv_scr_act());
+    lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_keyboard_set_textarea(kb, ta);
+    view_register_object_default_callback(kb, KEYBOARD_ID);
+    lv_obj_add_flag(kb, LV_OBJ_FLAG_HIDDEN);
+    data->kb = kb;
+
     update_communication(pmodel, data);
 }
 
 
 static pman_msg_t process_page_event(pman_handle_t handle, void *state, pman_event_t event) {
-    pman_msg_t    msg  = PMAN_MSG_NULL;
+    pman_msg_t        msg  = PMAN_MSG_NULL;
     struct page_data *data = state;
 
     model_updater_t updater = pman_get_user_data(handle);
@@ -133,7 +133,7 @@ static pman_msg_t process_page_event(pman_handle_t handle, void *state, pman_eve
                         lv_obj_clear_flag(data->kb, LV_OBJ_FLAG_HIDDEN);
                         break;
                 }
-        } else if (lv_event_get_code(event.as.lvgl) == LV_EVENT_VALUE_CHANGED) {
+            } else if (lv_event_get_code(event.as.lvgl) == LV_EVENT_VALUE_CHANGED) {
                 switch (objdata->id) {
                     case ACCESS_LEVEL_DD_ID:
                         model_mark_parmac_to_save(pmodel);
@@ -158,11 +158,11 @@ static pman_msg_t process_page_event(pman_handle_t handle, void *state, pman_eve
                         strcpy(pmodel->configuration.parmac.nome, lv_textarea_get_text(ta));
                         model_mark_parmac_to_save(pmodel);
                         break;
-                                      }
+                    }
                 }
             }
             break;
-                                   }
+        }
 
         case PMAN_EVENT_TAG_USER:
             update_communication(pmodel, data);
